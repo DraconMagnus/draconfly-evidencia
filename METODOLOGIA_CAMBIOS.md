@@ -656,6 +656,113 @@ por adelantado bajo qué condiciones se permitirá moverlos. Se escribe antes de
 tener resultados a propósito: declarar el criterio de éxito después de ver los
 datos es la forma más fácil de engañarse.
 
+## 2026-10-06 (2) — La evidencia se publica, y el verificador casi publica la cohorte B
+
+Se creó **`draconfly-evidencia`**, repositorio público con la cadena encadenada
+por hash, los pesos exactos del Score, este archivo y un verificador
+independiente. No cambia ningún número: cambia quién puede comprobarlos.
+
+### Lo que se publicó, y por qué va completo
+
+La cadena entera, `docs/seleccion-de-creadores.md` **con los coeficientes
+exactos** (0.65, 0.12, +6, +3.75, +10), este registro de cambios con sus 37
+entradas —incluidas todas las de errores propios— y `OBSERVACIONES_EN_VUELO.md`.
+
+Lo único que se retiró fue el enlace a un artifact privado.
+
+### `verificar.py` no importa nada de Draconfly
+
+Solo la biblioteca estándar. Un verificador que dependa del código del
+verificado no verifica nada. Hace cuatro cosas:
+
+1. Recalcula los 2,297 eventos: `seq`, `prev` y hash.
+2. Recuenta bajo cada vara **leyendo los umbrales del propio evento
+   `rule_change`**, no de una copia en el script.
+3. **Reconstruye la cifra publicada desde el archivo**: 450 predicciones, 120
+   éxitos, 26.7%, sobre 261 creadores. Sale idéntica.
+4. Comprueba que la vara se declaró **antes** del primer resultado: 2026-08-27
+   contra 2026-09-02.
+
+El punto 4 existe porque la vara se fijó un día **después** de que arrancara la
+cohorte A, y ésa es la objeción legítima. Lo que la salva no es el calendario
+sino el horizonte de siete días: el 27 de agosto no existía todavía un solo
+resultado de A. Prometerlo en prosa no sirve; el script lo demuestra con las
+dos fechas del archivo.
+
+### Se publica el número que sale peor
+
+El archivo completo da ~20.7%, no 26.7%. El README lo dice antes de que el
+lector lo descubra:
+
+| tramo | n | tasa |
+| --- | --- | --- |
+| antes del congelamiento (< 08-26) | 481 | **14.8%** |
+| cohorte A (08-26 a 09-24) | 450 | **26.7%** |
+| entre A y B (09-25 a 10-05) | 75 | 22.7% |
+
+El primer tramo es peor a propósito: son predicciones emitidas mientras el
+pipeline todavía se cambiaba. Medir un sistema con lo que predijo mientras lo
+ajustabas no mide el sistema.
+
+### La fuga: el verificador iba a publicar la lectura parcial de B
+
+**Es la cuarta vez que esta fuga aparece, y la primera en que habría sido
+pública.**
+
+El tercer tramo estaba abierto hacia el futuro —"posteriores a A (≥ 09-25)"—,
+así que desde el **2026-10-13**, cuando vencieran las primeras predicciones de
+B, habría empezado a imprimirlas en cada corrida.
+
+El recuento global por vara tenía el mismo agujero y era peor: **restar dos
+corridas consecutivas da la tasa de B lote por lote**. Cegar la tabla de la
+cohorte y dejar abierto el total es cegar la puerta y dejar la ventana.
+
+Los dos cortan ahora en `COHORTE_B_DESDE`, y lo dicen en pantalla —un corte
+silencioso se parece demasiado a un dato que falta.
+
+### La tensión que el README dice en voz alta
+
+Los eventos de B **sí** se publican según se emiten, porque ese fechado es lo
+que hace creíble a B: retenerlos hasta que cierre destruiría la prueba que el
+repositorio existe para dar.
+
+O sea que cualquiera puede sumar a mano los resultados parciales de B. Lo que
+el cegado protege no es el secreto del dato: es que **quien construyó el
+sistema no ajuste nada a mitad de camino**. El README lo explica en vez de
+dejar que el lector lo note y concluya que decimos "cegada" sin cumplirlo.
+
+### El espejo no puede quedarse atrás en silencio
+
+`run_publish_ledger.cmd` actualiza el repositorio público al final de cada
+lote, **siempre** —incluso cuando aquí no hubo cambios—, porque si un push
+anterior falló, saltárselo por "no hay nada nuevo" lo dejaría atrasado para
+siempre. Antes de publicar corre el **verificador independiente**, que es la
+única comprobación de que el archivo es verificable por quien lo clone y no
+solo por nosotros con nuestro propio código.
+
+Y `check_espejo_evidencia()` compara los dos manifiestos en cada health check.
+Existe porque el README público **afirma** que cada lote se publica allí: si el
+espejo se detiene, esa frase pasa a ser falsa sin que nada falle. Un
+repositorio de evidencia desactualizado no es neutral — desmiente solo lo que
+promete.
+
+### Un detalle que no es cosmético
+
+Se forzó `eol=lf` con `.gitattributes`. Sin eso, un clon en Windows recibiría
+CRLF y un verificador escrito por otra persona, menos tolerante que el nuestro,
+calcularía hashes distintos sobre los mismos datos y concluiría que la cadena
+está rota. Una falsa acusación de manipulación por culpa de un salto de línea
+es exactamente lo que este repositorio no se puede permitir.
+
+### Y publicar cambia lo que se mide
+
+Publicar quince nombres al día les manda audiencia. El README lo declara y
+remite al brazo ciego que arrancó el 2026-10-06 — que es, por fin, la razón por
+la que esa tabla ciega existía antes de hacer falta.
+
+7 pruebas nuevas, suite completa en 382, verde. Las dos del cegado se
+verificaron contra el código anterior al arreglo: fallan.
+
 ## 2026-10-06 — El bono cross-platform opera sobre datos congelados desde julio
 
 **No invalida ninguna cohorte.** Se anota porque el documento de selección
