@@ -656,6 +656,89 @@ por adelantado bajo qué condiciones se permitirá moverlos. Se escribe antes de
 tener resultados a propósito: declarar el criterio de éxito después de ver los
 datos es la forma más fácil de engañarse.
 
+## 2026-10-06 (4) — Arreglar una de seis y darlo por cerrado
+
+Ampliación de la entrada anterior, escrita porque el error de método importa
+más que el arreglo: **corté una consulta, verifiqué que el reporte matutino
+quedara bien, y di el problema por resuelto.** El tablero seguía mostrando
+cuatro cifras sin tope.
+
+Apareció al preguntar cómo se vería esto en el tablero. No lo encontré leyendo
+código: lo encontré **mirando la página**.
+
+### Las seis consultas, no una
+
+| consulta | qué alimenta | en pantalla |
+| --- | --- | --- |
+| `current` | `current_hit_rate_pct`, `current_index` | PRECISIÓN DEL SISTEMA ACTUAL |
+| `totals` | `hit_rate_pct`, `strict_hit_rate_pct` | **PRECISIÓN DE PREDICCIÓN** |
+| `matched` | `matched_base_rate_pct`, `lift_pp` | **TASA BASE**, **LIFT** |
+| `forward` | el bloque prospectivo | oculto mientras B corre |
+| `evaluated_rows` | `attention_delta` | **la flecha ▲ del titular** |
+| el índice | `attention_index` | **ÍNDICE DE CONFIABILIDAD** |
+
+Sólo la primera tenía tope. Las cinco restantes se cortaron en el mismo
+`CIERRE_CIFRA_PUBLICADA`, y **ninguna cifra cambió hoy** —20.7%, 22.1%, 9.2%,
++13.8 pp, 18.3— porque las predicciones de B están pendientes. Los cortes son
+gratis ahora y cierran todo antes del 2026-10-13.
+
+### La peor de las cinco era la flecha
+
+`attention_delta` parte las evaluadas **en dos mitades por fecha** y resta la
+reciente menos la anterior. Desde el 13 de octubre la mitad reciente habría
+sido casi toda cohorte B.
+
+Esa flecha **es** la tasa de B contra la de A, con un triangulito al lado y en
+el titular del tablero.
+
+### Y un fallo que introduje yo mismo
+
+Al cortar `totals` dejé el índice usando **numerador cegado con denominador sin
+cortar**: `wilson_lower_bound(successes_cegado, scoreable)`.
+
+Nada habría fallado. El denominador habría crecido con cada predicción de B
+evaluada mientras el numerador se quedaba quieto, y **el ÍNDICE DE CONFIABILIDAD
+se habría hundido solo durante un mes.** Un número que baja sin motivo es peor
+que uno que filtra, porque invita a tocar el modelo — que es exactamente lo que
+el congelamiento existe para impedir.
+
+### Lo que se ciega y lo que no
+
+Las **tasas** se cortan. Los **conteos de actividad** —predicciones emitidas,
+pendientes, evaluadas— **no**, porque el punto 9 exige que la ejecución sea
+visible: si el tablero dijera que no se emite nada desde el 10-06, un pipeline
+detenido se vería igual que uno sano.
+
+El tablero lo dice en su propia nota al pie, en los tres idiomas, usando una
+clase CSS (`.investor-footnote`) que existía desde siempre sin que nada la usara:
+
+> Precisión, índice, tasa base y lift están congelados en 2026-10-06: la cohorte
+> B está en curso y sus resultados no entran en ninguna tasa hasta que cierre.
+> Los conteos de actividad —predicciones emitidas y pendientes— sí incluyen a B.
+> No es un dato detenido: es el cegado de la replicación.
+
+### Una prueba vacua, detectada a tiempo
+
+La primera prueba del índice comparaba su valor contra
+`wilson_lower_bound(successes_cegado, scoreable_publicado)`. **Pasaba con el
+denominador equivocado**, porque hoy `scoreable_cegado` y `scoreable` valen lo
+mismo. Habría empezado a detectar el fallo el 2026-10-13 — justo cuando ya
+estuviera en pantalla.
+
+Rehecha por AST: exige que la expresión use `scoreable_cegado` y **no** mencione
+`scoreable`. Verificado cambiando el denominador: falla. Las seis guardas se
+verificaron igual, quitándole el tope a cada consulta por separado.
+
+### Qué llevarse de esto
+
+Las cinco apariciones anteriores de esta fuga se acumularon por el mismo motivo,
+y ésta lo repite dentro de un solo arreglo: **tapar el camino que uno está
+mirando y dar el problema por cerrado.** La diferencia es que esta vez el
+inventario está escrito —seis consultas, cada una con su prueba— en vez de
+depender de volver a auditar.
+
+4 pruebas nuevas, suite completa en 408, verde.
+
 ## 2026-10-06 (3) — La cifra que se lee todas las mañanas iba a absorber la cohorte B
 
 **Quinta aparición de la misma fuga, y la peor de las cinco.** Las cuatro
