@@ -55,14 +55,19 @@ y es el criterio pre-registrado al que corresponde el 26.7%.
 
 ## El número que no te vamos a esconder
 
-Si corres `verificar.py` vas a ver que el archivo completo da **20.7%**, no
-26.7%. No es una contradicción y no queremos que lo descubras tú:
+Si corres `verificar.py` vas a ver que el archivo completo da alrededor de
+**20.7%**, no 26.7%. No es una contradicción y no queremos que lo descubras tú:
 
-| tramo | n | éxitos | tasa |
-| --- | --- | --- | --- |
-| antes del congelamiento (< 2026-08-26) | 481 | 71 | **14.8%** |
-| **cohorte A** (08-26 a 09-24) | 450 | 120 | **26.7%** |
-| posteriores a A (≥ 09-25) | 60 | 14 | 23.3% |
+| tramo | n | éxitos | tasa | |
+| --- | --- | --- | --- | --- |
+| antes del congelamiento (< 2026-08-26) | 481 | 71 | **14.8%** | cerrado |
+| **cohorte A** (08-26 a 09-24) | 450 | 120 | **26.7%** | cerrado |
+| entre A y B (09-25 a 10-05) | 75 | 17 | 22.7% | *todavía venciendo* |
+
+Las dos primeras filas están cerradas y no se van a mover. La tercera sigue
+creciendo hasta el 2026-10-13, así que el número de arriba es una foto del
+2026-10-06 — **corre el script para el de hoy**; está puesto aquí para que no
+parezca que lo escondemos, no como cifra.
 
 El primer tramo es peor **a propósito**: son predicciones emitidas mientras el
 pipeline todavía se estaba cambiando — los pesos se congelaron el 2026-07-26,
@@ -130,6 +135,28 @@ y se lee a las 450 predicciones cerradas, hacia mediados de noviembre.
 Está **cegada**: no se miran resultados parciales. Lo que se declaró antes de
 empezar —ventana, tamaño, vara, umbrales— está en `METODOLOGIA_CAMBIOS.md` con
 su fecha de commit.
+
+### Y aquí hay una tensión que conviene decir en voz alta
+
+Los eventos de B se publican en esta cadena según se emiten y según vencen,
+porque **ese es justamente el fechado que hace a B creíble**: una predicción de
+B que GitHub certifica como subida el día que se emitió no pudo escribirse
+después. Retenerlas hasta que B cierre destruiría la prueba que el repositorio
+existe para dar.
+
+O sea que el dato crudo de B es público, y cualquiera puede sumar los
+resultados que lleva y sacar una lectura parcial.
+
+Lo que el cegado protege no es el secreto del dato: es que **quien construyó el
+sistema no ajuste nada a mitad de camino**. Por eso `verificar.py` corta todos
+sus recuentos en el 2026-10-06 y se niega a agregar un solo resultado de B —
+también los totales, no solo la tabla de la cohorte, porque restar dos corridas
+consecutivas del script daría la tasa de B lote por lote. Cegar la puerta y
+dejar la ventana no es cegar.
+
+La lectura de B es **a las 450 vencidas**, declarada antes de empezar. Una
+lectura parcial que alguien calcule por su cuenta no es esa lectura, y el valor
+de B está en que la fecha de lectura no se eligió después de mirar.
 
 ## Los archivos
 

@@ -31,6 +31,19 @@ CADENA = AQUI / "ledger_chain.jsonl"
 MANIFIESTO = AQUI / "MANIFEST.json"
 GENESIS = "0" * 64
 
+# La cohorte B arranco aqui y esta CEGADA: no se miran resultados parciales,
+# ni nosotros ni nadie, hasta que cierre a las 450 predicciones vencidas.
+#
+# Este tope existe por eso. Sin el, el tramo "posteriores a A" empezaria a
+# absorber resultados de B desde el 2026-10-13 --siete dias despues del
+# arranque, cuando venzan los primeros-- y este script publicaria en cada
+# corrida la lectura parcial que el protocolo prohibe mirar.
+#
+# Es la tercera vez que la misma fuga aparece en este proyecto: el cegado se
+# implementa donde uno esta mirando y no en los otros caminos que llegan al
+# mismo dato.
+COHORTE_B_DESDE = "2026-10-06"
+
 
 def canonico(payload):
     """Serializacion estable. Sin ella, dos implementaciones que ordenen las
@@ -87,16 +100,26 @@ def clasificar(regla, growth_pct, peak, baseline):
 
 
 def recuento(eventos, regla):
-    bases = {}
+    """Recuento global bajo una vara, PARANDO en el arranque de la cohorte B.
+
+    El corte no es cosmetico. Sin el, este total absorberia los resultados de
+    B segun fueran venciendo y dos corridas consecutivas de este script,
+    restadas, darian la tasa de B lote por lote. Cegar la tabla de B y dejar
+    abierto el total seria cegar la puerta y dejar la ventana.
+    """
+    bases, emitida = {}, {}
     for ev in eventos:
         if ev["event"] == "prediction":
             bases[ev["data"]["prediction_id"]] = float(ev["data"].get("baseline_value") or 0)
+            emitida[ev["data"]["prediction_id"]] = ev["data"]["created_at"][:10]
 
     conteo, puntuables, aciertos = {}, 0, 0
     for ev in eventos:
         if ev["event"] != "outcome":
             continue
         d = ev["data"]
+        if emitida.get(d["prediction_id"], "0000-00-00") >= COHORTE_B_DESDE:
+            continue
         hit, resultado = clasificar(
             regla,
             float(d.get("actual_growth_pct") or 0),
@@ -117,6 +140,7 @@ def recuento(eventos, regla):
 COHORTE_A_DESDE = "2026-08-26"
 COHORTE_A_HASTA = "2026-09-25"
 COHORTE_A_REGLA = "hit-fair-v2"
+
 
 
 def cohorte_a(eventos, regla):
@@ -169,7 +193,7 @@ def por_periodo(eventos, regla):
     tramos = [
         ("antes del congelamiento", "0000-00-00", COHORTE_A_DESDE),
         ("cohorte A", COHORTE_A_DESDE, COHORTE_A_HASTA),
-        ("posteriores a A", COHORTE_A_HASTA, "9999-99-99"),
+        ("entre A y B", COHORTE_A_HASTA, COHORTE_B_DESDE),
     ]
     salida = []
     for nombre, desde, hasta in tramos:
@@ -230,6 +254,7 @@ def main():
         print("RECUENTO BAJO CADA VARA DECLARADA EN LA CADENA")
         print("=" * 68)
         print("  (los umbrales salen del evento rule_change, no de este script)")
+        print("  (se cuenta hasta el %s: la cohorte B esta cegada)" % COHORTE_B_DESDE)
     for regla in reglas:
         conteo, puntuables, aciertos = recuento(eventos, regla)
         tasa = (100.0 * aciertos / puntuables) if puntuables else 0.0
@@ -269,6 +294,11 @@ def main():
         print("    El primer tramo es peor a proposito: son predicciones emitidas")
         print("    mientras el pipeline todavia se estaba cambiando. Por eso la")
         print("    cohorte A empieza el %s y no antes." % COHORTE_A_DESDE)
+        print()
+        print("    Las predicciones emitidas desde el %s son la cohorte B y" % COHORTE_B_DESDE)
+        print("    NO se cuentan aqui: esta cegada hasta que cierre. Este script")
+        print("    no las mira, para no publicar la lectura parcial que el")
+        print("    protocolo de B prohibe.")
         print()
         # La vara v2 se declaro el 2026-08-27, un dia DESPUES de que A
         # arrancara. Lo que lo hace legitimo es que el primer resultado de A
