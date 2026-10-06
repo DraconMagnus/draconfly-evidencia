@@ -1,0 +1,6 @@
+﻿# Esto no es cosmetico. El repositorio existe para que un tercero recalcule
+# hashes sobre archivos, asi que lo que clone tiene que ser byte a byte lo que
+# se publico. Sin esto, un clon en Windows recibiria CRLF y cualquier
+# verificador menos tolerante que verificar.py daria un hash distinto.
+* text=auto eol=lf
+*.jsonl text eol=lf
