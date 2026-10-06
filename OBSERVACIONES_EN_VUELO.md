@@ -168,3 +168,114 @@ dos casos.
 El tope se expresa como igualdad contra `COHORTE_B_DESDE`, no como fecha escrita
 a mano, y una prueba lo exige. Si el arranque de B cambiara, la prueba obliga a
 mover el cierre en vez de dejar la fuga abierta en silencio.
+
+---
+
+## 2026-10-06 — El primer lote de YouTube elige videos 19 veces más chicos que la mediana
+
+**Qué disparó la pregunta.** El primer lote de la cohorte de YouTube se emitió
+hoy a las 15:25 (ancla `2026-10-06T16:00:00+00:00`). Al revisar que hubiera
+quedado bien, saltó que **en 11 de las 15 filas `umbral_exito` y `umbral_hit`
+son el mismo número**: 10,000.
+
+**La primera lectura era equivocada.** Parecía que el piso de 10,000 vistas
+absorbía al ratio y dejaba las dos varas indistinguibles. En la población no es
+así:
+
+```
+anclas con horizonte 24 h: 1,978,666
+
+el ratio manda (y no el piso) en:
+  HIT  (x5.0):  71.0%      hace falta baseline > 2,000
+  FAIR (x3.5):  65.7%      hace falta baseline > 2,857
+
+HIT y FAIR son el MISMO umbral en 34.3% de las anclas
+```
+
+Para dos tercios de la población las dos varas son criterios distintos. La vara
+no es degenerada.
+
+### Lo que sí es el hallazgo
+
+| | mediana de baseline |
+| --- | --- |
+| población de anclas | **10,836** |
+| el lote emitido hoy | **581** |
+
+**El ranker elige videos 19 veces más chicos que la mediana de la población.**
+Y eso tiene una consecuencia mecánica que conviene decir en voz alta: para esos
+videos la vara declarada es *más difícil*, no más fácil. Un video en 148 vistas
+no necesita crecer ×5 —eso serían 740 vistas—: necesita llegar a 10,000, o sea
+**×68**.
+
+### La medición que lo resuelve
+
+Tasa de éxito por banda de baseline, sobre la misma población con que se entrenó
+el ranker. Para repetirla con los mismos cortes:
+
+```bash
+python -m draconfly youtube-bandas
+```
+
+Los cortes están congelados en `draconfly/youtube_bandas.py` y hay pruebas
+(`test_cortes_congelados`, `test_el_corte_de_2857_es_donde_colapsan_las_varas`)
+que fallan si alguien los mueve. El corte de 2,857 no es redondo: es
+`PISO_VISTAS / RATIO_FAIR`, puesto exactamente donde el fenómeno empieza.
+
+| banda de baseline | n | éxito | HIT | % del total |
+| --- | --- | --- | --- | --- |
+| < 500 | 23,736 | **5.039%** | **5.039%** | 1.2% |
+| 500 – 1k | 114,945 | 1.932% | 1.932% | 5.8% |
+| 1k – 2.9k | 540,781 | 1.680% | 1.558% | 27.3% |
+| 2.9k – 10k | 290,705 | **5.314%** | 3.427% | 14.7% |
+| 10k – 50k | 501,338 | 1.268% | 0.759% | 25.3% |
+| > 50k | 507,161 | 0.566% | 0.252% | 25.6% |
+| **total** | **1,978,666** | **1.879%** | **1.359%** | |
+
+**Elegir chico es correcto.** Los videos por debajo de 500 vistas alcanzan el
+criterio **5.04%** de las veces, contra **0.57%** de los de más de 50 mil — nueve
+veces más, pese a necesitar ×68 en vez de ×5. En HIT estricto la separación es
+de **20×** (5.04% contra 0.25%). Es el efecto de los shorts: lo que explota,
+explota desde abajo.
+
+Las dos primeras bandas tienen éxito y HIT **idénticos**, que es la otra cara del
+34.3% de arriba: por debajo de 2,000 de baseline el piso manda y las dos varas
+colapsan en una.
+
+### Lo que queda sin resolver
+
+La relación **no es monótona**. La banda más fuerte no es la más chica sino
+**2.9k–10k, con 5.314%**, y entre 500 y 2.9k hay un valle (1.93% y 1.68%) por
+debajo del promedio global.
+
+El lote de hoy cae mayormente en ese valle: **9 de 15 por debajo de 700 vistas**,
+y sólo los rangos 10 a 13 (2,309 a 5,900) tocan la banda fuerte.
+
+**Esto no dice que las elecciones estén mal.** La tasa por banda es marginal:
+condiciona sólo en el baseline e ignora las otras seis features. Un video de 581
+vistas con la firma de velocidad y engagement correcta puede perfectamente batir
+a uno de 5,000 sin ninguna. Lo que dice es que **la banda** es débil, no que los
+picks lo sean — y eso sólo lo contesta el resultado de la cohorte.
+
+### Qué se decidió
+
+**No tocar nada.** La vara se pre-registró el 2026-10-05 y el ranker el mismo
+día; las dos cosas se commitearon antes de emitir una sola predicción. Cambiar
+cualquiera de las dos ahora —aunque el cambio pareciera una mejora— destruiría
+el pre-registro, que es el único activo que esta cohorte tiene todavía.
+
+La lectura es a las 450 predicciones cerradas, con el horizonte de 24 h: unos 30
+días desde hoy.
+
+### Qué revisar al cerrar
+
+1. La tasa de éxito del lote **por banda de baseline**, contra la tabla de
+   arriba. Si los picks del valle rinden como el valle, el ranker está pagando
+   un precio por elegir chico. Si rinden por encima, las otras features están
+   haciendo el trabajo y la tasa marginal no decía nada.
+2. Si el `score` separó algo. En este lote va de **0.9958 a 0.9969** —un rango de
+   0.0011 entre el primero y el decimoquinto— así que `rank_en_lote` es, en la
+   práctica, arbitrario. Es el mismo hallazgo ya anotado para Twitch, pero más
+   extremo.
+3. Si conviene declarar el piso de 10,000 **relativo a la banda** en la cohorte
+   siguiente. Es un cambio de vara, así que no puede entrar a ésta.
