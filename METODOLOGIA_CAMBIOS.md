@@ -656,6 +656,109 @@ por adelantado bajo qué condiciones se permitirá moverlos. Se escribe antes de
 tener resultados a propósito: declarar el criterio de éxito después de ver los
 datos es la forma más fácil de engañarse.
 
+## 2026-10-06 (3) — La cifra que se lee todas las mañanas iba a absorber la cohorte B
+
+**Quinta aparición de la misma fuga, y la peor de las cinco.** Las cuatro
+anteriores estaban en comandos que se corren a propósito. Ésta está en el
+número que se mira **todos los días** y que se publica.
+
+### La fuga
+
+La consulta `current` de `ledger_summary()` —la que alimenta
+`current_hit_rate_pct`, o sea el encabezado del tablero y la línea
+`precision` del reporte matutino— **no tenía tope de fecha**. Sólo
+`baseline_value >= 50`.
+
+Las predicciones de B están pendientes hasta el **2026-10-13T06:00**, así que
+hoy no cambiaba nada. Desde ese día la cifra habría empezado a incluir los
+aciertos de B y a moverse cada mañana delante de quien lee el reporte.
+
+Diluida entre ~930 casos, sí. Pero el punto 8 del protocolo no dice *"no se
+miran resultados parciales grandes"*: dice que no se miran. **Una tasa que
+incluye los aciertos de B es un resultado parcial de B.**
+
+### Lo que NO era un fallo, y casi "arreglo"
+
+Al revisarlo apareció que esa cifra da **22.1%** mientras la publicada y
+congelada de la cohorte A es **26.7%**, y que filtrando desde el
+pre-registro daría **26.1%**. Parecía un filtro faltante.
+
+No lo es. La entrada del **2026-09-08** decidió explícitamente que el histórico
+*"no se corrige ni se retira: es el histórico verdadero y se sigue
+publicando"*, y `current` ya está restringido a lo que el pipeline de hoy sí
+elegiría (`baseline_value >= 50`). Las tres cifras son tres poblaciones y el
+reporte ya las muestra en bloques separados, cada una con su nombre.
+
+Cambiarla habría sido revertir una decisión documentada por no haberla leído.
+
+### El arreglo, y lo que cuesta
+
+`CIERRE_CIFRA_PUBLICADA = "2026-10-06"`, y la consulta corta ahí. Hoy el
+resultado es idéntico —926 puntuables, 205 éxitos, 22.1%— porque las de B están
+pendientes, así que el corte es **gratis ahora** y cierra la fuga antes del 13.
+
+El precio: **la cifra publicada queda congelada mientras B corre.** Eso es
+deseable —una replicación quiere que su número de referencia no se mueva— pero
+congelarla en silencio no lo es, así que el reporte lo imprime:
+
+```
+  lo que se publica
+    precision            22.1%   solo HIT 13.5%
+    (congelada en 2026-10-06: la cohorte B no entra en esta cifra hasta cerrar)
+```
+
+**No se descongela sola.** Cuando B cierre hay que mover la fecha a mano. Un
+descongelamiento automático volvería a mezclar las poblaciones el día que nadie
+está mirando; y para que no se olvide, el reporte cambia ese aviso por
+`DESCONGELAR: B cerró y la cifra sigue cortada` en cuanto B cierra.
+
+Una prueba exige que el tope sea **igual** a `COHORTE_B_DESDE`, no una fecha
+escrita a mano, y otra que la consulta conserve el tope. Verificadas quitándolo:
+fallan.
+
+### Y la otra mitad del punto 9: vigilar la ejecución
+
+El protocolo de YouTube parte la vigilancia en dos —mirar el resultado está
+prohibido, vigilar la ejecución es **obligatorio**— y lo segundo no estaba.
+
+La tarea ya estaba en `SCHEDULED_TASKS`, así que un código distinto de cero se
+ve. Lo que no se veía son los **ceros silenciosos**:
+
+| modo de fallo | antes | ahora |
+| --- | --- | --- |
+| la tarea no corre | sí | sí |
+| corre, devuelve 0 y emite 0 filas | **no** | sí |
+| emite menos de 15 en un día | **no** | sí |
+| `evaluar()` no cierra lo ya vencido | **no** | sí |
+
+`vigilar_ejecucion()` cuenta filas y fechas, con reloj inyectable y una
+tolerancia de 26 h para no avisar de un vencimiento que la corrida diaria
+todavía no alcanzó. **Nunca toca `hit` ni `outcome`**, y una prueba por AST lo
+verifica —restringida a esa función, porque `emitir()` y `evaluar()` sí deben
+tocarlas—.
+
+### Tres tropiezos propios, por si sirven
+
+**El caché global.** Escribí un `estado_b_cached()` con `global` para no leer
+dos veces. Viviría lo que dure el proceso, así que un reporte posterior habría
+mostrado estado viejo — peor que el problema que resolvía. Sustituido por una
+sola lectura pasada a los dos sitios.
+
+**La prueba que se tropezó con su propia prosa.** El detector AST daba positivo
+en `vigilar_ejecucion` porque su docstring dice *"no toca `hit` ni `outcome`"*.
+Quinta vez. Y el primer arreglo tampoco servía: comparar `nodo.value ==
+ast.get_docstring(...)` nunca coincide, porque `get_docstring` **normaliza la
+indentación**. Ahora se salta por identidad de nodo.
+
+**El guardia que hizo su trabajo.** `test_fugas_cohorte_b` lleva un inventario
+de toda consulta que ventanea el ledger por fecha, y falló al pasar
+`youtube_cohorte.py` de 1 a 3. Se revisaron las dos nuevas —ventanean
+`youtube_prediction_ledger`, no `prediction_ledger`— y se actualizó el
+inventario **con la justificación escrita**, que es la única forma de
+actualizarlo sin convertirlo en un sello de goma.
+
+9 pruebas nuevas, suite completa en 404, verde.
+
 ## 2026-10-06 (2) — La evidencia se publica, y el verificador casi publica la cohorte B
 
 Se creó **`draconfly-evidencia`**, repositorio público con la cadena encadenada
