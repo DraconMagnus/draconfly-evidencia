@@ -1,9 +1,9 @@
 {
-  "events": 2282,
+  "events": 2297,
   "predictions": 1200,
-  "outcomes": 1080,
-  "last_hash": "770e921d8d22d9b4d397dc842af79ad80326987cb9e91be4504b8d6b6faf4464",
-  "updated_at": "2026-10-06T11:10:03.444411+00:00",
+  "outcomes": 1095,
+  "last_hash": "489092112be7b6f18c5c058ed4da67bb1ff57040768c9462fb06a5e6ef651fa7",
+  "updated_at": "2026-10-06T17:19:21.615601+00:00",
   "algoritmo": "sha256 sobre {seq,event,recorded_at,data,prev} en JSON canonico (sort_keys, sin espacios, UTF-8)",
   "verificar": "python -m draconfly verify-public-ledger"
 }
