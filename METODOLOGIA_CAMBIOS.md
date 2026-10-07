@@ -656,6 +656,70 @@ por adelantado bajo qué condiciones se permitirá moverlos. Se escribe antes de
 tener resultados a propósito: declarar el criterio de éxito después de ver los
 datos es la forma más fácil de engañarse.
 
+## 2026-10-06 (5) — El tablero se parte por plataforma cuando CIERRE la cohorte de YouTube
+
+Decidido hoy, con la condición escrita por adelantado para que no se decida
+después mirando cuál partición se ve mejor.
+
+### El problema que sí se arregló hoy
+
+Las seis cifras del titular del tablero salen de `prediction_ledger`, que es
+**Twitch: 1,198 de 1,200 filas**. Ninguna etiqueta lo decía — "Precisión de
+predicción", "Tasa base (azar elegible)"— mientras Creator Pulse, en la misma
+pantalla, muestra creadores de YouTube.
+
+Un lector concluye razonablemente que el 20.7% cubre las dos plataformas. No las
+cubre. El punto 6 del protocolo de YouTube ya prohibía esa lectura, pero la
+prohibía en un archivo y no en la pantalla donde se comete. Ahora el aviso está
+en la copia permanente del tablero, en los tres idiomas.
+
+### Por qué el split se difiere, y hasta cuándo exactamente
+
+Hoy sería un cuarto vacío: **15 predicciones de YouTube, 0 cerradas**. Y peor,
+partir la pantalla pone 1.885% y 9.79% uno al lado del otro, que es justo la
+comparación por razón que el punto 6 prohíbe.
+
+**La condición de disparo es que la cohorte de YouTube CIERRE** —450
+predicciones cerradas, hacia el **2026-11-06**— y no que tenga sus primeros
+resultados cerrados.
+
+La distinción importa y es fácil de confundir: con horizonte de 24 h, las
+primeras 15 cierran **el 2026-10-07**, o sea mañana. Pero el punto 9 las tiene
+cegadas hasta el cierre de la cohorte, así que entre el 10-07 y el ~11-06 habría
+resultados cerrados que **no se pueden mostrar**. Una sección de YouTube abierta
+en ese tramo tendría que enseñar un censo y callar los aciertos, que es más
+confuso que no tener la sección.
+
+### Qué NO es motivo para adelantarlo
+
+Que el split sea trabajo de presentación y no de selección —o sea que no anula
+ninguna cohorte— es cierto y no viene al caso. Lo que lo difiere no es el riesgo
+metodológico: es que no hay nada que mostrar y que mostrarlo a medias invita a la
+lectura que el protocolo prohíbe.
+
+### Lo que queda verificado de paso: el brazo ciego no se filtra
+
+| camino | estado |
+| --- | --- |
+| `informe()` | reserva aciertos, tasa y efecto hasta que cierre B |
+| el tablero | **cero** referencias a `blind_prediction_ledger` |
+| la cadena pública | exporta sólo `prediction_ledger`: **0 de los 12 ids** del brazo aparecen |
+
+El tablero está cegado por **separación de tabla**, no por un filtro que alguien
+tenga que recordar — más robusto que los seis topes de la entrada anterior,
+porque no hay nada que olvidar.
+
+El tercero es el de más consecuencia: publicar el grupo de control no filtraría
+una cifra, **destruiría el experimento**, porque le daría a los creadores de
+control exactamente la audiencia que el brazo existe para negarles. Comprobado
+cruzando los 12 ids contra la cadena publicada, no leyendo el código.
+
+**Una vía de contaminación menor queda abierta y escrita:** Creator Pulse sortea
+creadores elegibles, así que uno del brazo puede aparecer ahí por azar (6 fichas
+sobre ~3,090 por carga). Es exposición al control, pero de otro orden que la
+sección dedicada de los 15 publicados. No se tapa: taparla exigiría que el
+sorteo conozca el brazo, y entonces el tablero leería la tabla ciega.
+
 ## 2026-10-06 (4) — Arreglar una de seis y darlo por cerrado
 
 Ampliación de la entrada anterior, escrita porque el error de método importa
