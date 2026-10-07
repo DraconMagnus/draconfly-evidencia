@@ -10,17 +10,34 @@ seis meses— pueda comparar dos capturas de pantalla separadas en el tiempo y
 entender por qué un número subió o bajó, sin tener que confiar en la memoria de
 nadie.
 
-Los cambios de interfaz, traducción, rendimiento o infraestructura **no** se
-listan aquí salvo que hayan alterado lo que el tablero mostraba.
+Son **tres secciones**, y la separación es el punto: mezclar lo que ya pasó con
+lo que prometimos haría este archivo inútil para auditar.
 
-Al final hay una segunda sección, **Compromisos abiertos**, para instrumentación
-que todavía no mueve ningún número pero que sí compromete cómo se van a mover en
-el futuro. Se separa a propósito: mezclar lo que ya pasó con lo que prometimos
-haría este archivo menos útil para auditar.
+| sección | qué va ahí |
+| --- | --- |
+| **Cambios que movieron los números** | lo que ya ocurrió y alteró una cifra publicada, o lo que se puede afirmar de ella |
+| **Compromisos abiertos** | instrumentación que todavía no mueve ningún número, pero que fija **por adelantado** bajo qué condiciones se permitirá moverlos |
+| **Incidentes de operación** | fallos de tubería que no movieron ninguna cifra ni fijan condiciones: respaldos, tareas, mudanzas de disco |
+
+Los cambios de interfaz, traducción o rendimiento **no** se listan aquí salvo
+que hayan alterado lo que el tablero mostraba.
+
+> **Las tres secciones se separaron el 2026-10-06, y conviene saber por qué.**
+> Hasta ese día 38 de las 41 entradas estaban bajo *Compromisos abiertos* —no
+> por una decisión, sino porque la convención es más-reciente-primero y las
+> entradas nuevas caían justo debajo de ese encabezado—. Las secciones habían
+> dejado de significar nada, justo en el archivo que lee un auditor externo.
+>
+> No se borró ni se reescribió ninguna entrada: el reordenamiento se verificó
+> comparando los cuerpos byte a byte y el conteo de palabras del archivo
+> completo, que es lo que delató que la primera versión del script perdía las
+> reglas horizontales entre entradas.
 
 ---
 
 # Cambios que movieron los números
+
+---
 
 ## 2026-08-01 — HIT exige audiencia real, no solo porcentaje
 
@@ -649,77 +666,6 @@ mover la portería— pero obligó a publicar dos cifras donde una habría basta
 
 ---
 
-# Compromisos abiertos
-
-Instrumentación que **todavía no mueve ningún número publicado**, pero que fija
-por adelantado bajo qué condiciones se permitirá moverlos. Se escribe antes de
-tener resultados a propósito: declarar el criterio de éxito después de ver los
-datos es la forma más fácil de engañarse.
-
-## 2026-10-06 (5) — El tablero se parte por plataforma cuando CIERRE la cohorte de YouTube
-
-Decidido hoy, con la condición escrita por adelantado para que no se decida
-después mirando cuál partición se ve mejor.
-
-### El problema que sí se arregló hoy
-
-Las seis cifras del titular del tablero salen de `prediction_ledger`, que es
-**Twitch: 1,198 de 1,200 filas**. Ninguna etiqueta lo decía — "Precisión de
-predicción", "Tasa base (azar elegible)"— mientras Creator Pulse, en la misma
-pantalla, muestra creadores de YouTube.
-
-Un lector concluye razonablemente que el 20.7% cubre las dos plataformas. No las
-cubre. El punto 6 del protocolo de YouTube ya prohibía esa lectura, pero la
-prohibía en un archivo y no en la pantalla donde se comete. Ahora el aviso está
-en la copia permanente del tablero, en los tres idiomas.
-
-### Por qué el split se difiere, y hasta cuándo exactamente
-
-Hoy sería un cuarto vacío: **15 predicciones de YouTube, 0 cerradas**. Y peor,
-partir la pantalla pone 1.885% y 9.79% uno al lado del otro, que es justo la
-comparación por razón que el punto 6 prohíbe.
-
-**La condición de disparo es que la cohorte de YouTube CIERRE** —450
-predicciones cerradas, hacia el **2026-11-06**— y no que tenga sus primeros
-resultados cerrados.
-
-La distinción importa y es fácil de confundir: con horizonte de 24 h, las
-primeras 15 cierran **el 2026-10-07**, o sea mañana. Pero el punto 9 las tiene
-cegadas hasta el cierre de la cohorte, así que entre el 10-07 y el ~11-06 habría
-resultados cerrados que **no se pueden mostrar**. Una sección de YouTube abierta
-en ese tramo tendría que enseñar un censo y callar los aciertos, que es más
-confuso que no tener la sección.
-
-### Qué NO es motivo para adelantarlo
-
-Que el split sea trabajo de presentación y no de selección —o sea que no anula
-ninguna cohorte— es cierto y no viene al caso. Lo que lo difiere no es el riesgo
-metodológico: es que no hay nada que mostrar y que mostrarlo a medias invita a la
-lectura que el protocolo prohíbe.
-
-### Lo que queda verificado de paso: el brazo ciego no se filtra
-
-| camino | estado |
-| --- | --- |
-| `informe()` | reserva aciertos, tasa y efecto hasta que cierre B |
-| el tablero | **cero** referencias a `blind_prediction_ledger` |
-| la cadena pública | exporta sólo `prediction_ledger`: **0 de los 12 ids** del brazo aparecen |
-
-El tablero está cegado por **separación de tabla**, no por un filtro que alguien
-tenga que recordar — más robusto que los seis topes de la entrada anterior,
-porque no hay nada que olvidar.
-
-El tercero es el de más consecuencia: publicar el grupo de control no filtraría
-una cifra, **destruiría el experimento**, porque le daría a los creadores de
-control exactamente la audiencia que el brazo existe para negarles. Comprobado
-cruzando los 12 ids contra la cadena publicada, no leyendo el código.
-
-**Una vía de contaminación menor queda abierta y escrita:** Creator Pulse sortea
-creadores elegibles, así que uno del brazo puede aparecer ahí por azar (6 fichas
-sobre ~3,090 por carga). Es exposición al control, pero de otro orden que la
-sección dedicada de los 15 publicados. No se tapa: taparla exigiría que el
-sorteo conozca el brazo, y entonces el tablero leería la tabla ciega.
-
 ## 2026-10-06 (4) — Arreglar una de seis y darlo por cerrado
 
 Ampliación de la entrada anterior, escrita porque el error de método importa
@@ -802,6 +748,8 @@ inventario está escrito —seis consultas, cada una con su prueba— en vez de
 depender de volver a auditar.
 
 4 pruebas nuevas, suite completa en 408, verde.
+
+---
 
 ## 2026-10-06 (3) — La cifra que se lee todas las mañanas iba a absorber la cohorte B
 
@@ -905,6 +853,8 @@ inventario **con la justificación escrita**, que es la única forma de
 actualizarlo sin convertirlo en un sello de goma.
 
 9 pruebas nuevas, suite completa en 404, verde.
+
+---
 
 ## 2026-10-06 (2) — La evidencia se publica, y el verificador casi publica la cohorte B
 
@@ -1013,6 +963,8 @@ la que esa tabla ciega existía antes de hacer falta.
 7 pruebas nuevas, suite completa en 382, verde. Las dos del cegado se
 verificaron contra el código anterior al arreglo: fallan.
 
+---
+
 ## 2026-10-06 — El bono cross-platform opera sobre datos congelados desde julio
 
 **No invalida ninguna cohorte.** Se anota porque el documento de selección
@@ -1075,6 +1027,271 @@ señales, el health check reportó un falso aviso de `Collect Requested Topics`
 corregirlo salió la pregunta de fondo: **ocho de veinte tareas vivas no estaban
 vigiladas**. Entre ellas ésta, y `Publish Ledger Chain`, que es la que empuja la
 cadena con hash a GitHub.
+
+---
+
+## 2026-10-05 (5) — Búsqueda sistemática de fugas: no hay una tercera
+
+Después de encontrar dos fugas del cegado el mismo día, se buscó una tercera de
+forma sistemática en vez de por intuición. **No existe.**
+
+El criterio: un camino filtra si lee `prediction_ledger`, incluye filas con
+`created_at >= 2026-10-06`, expone desenlace, y es alcanzable antes del cierre.
+
+| verificación | resultado |
+|---|---|
+| consultas que ventanean el ledger por `created_at` | **5 en todo el código**, las cinco justificadas |
+| consumidores externos de `replicacion` | los 3 importan solo `estado_b`, nunca `cargar()` |
+| tablero, modo inversionista | ciega primero **y** pone `f_issued = 0` |
+| `continuation.py` | lee `twitch_horizon_labels`, no predicciones |
+| `ledger_audit.py` | verifica coherencia, no calcula tasas |
+
+Las cinco consultas con ventana: tres en `replicacion.py` (cegadas por diseño y
+solo alcanzables desde dentro del módulo), una en `monitoreo_mitades.py` (cerrada
+hoy en el arranque de B) y una en `youtube_cohorte.py` (tabla propia).
+
+### Lo que sí hay, y es distinto de una fuga
+
+**Seis superficies agregan todo el histórico sin aislar a B**, y desde el
+2026-10-06 la incluyen:
+
+- `ledger_summary()` → la precisión publicada del tablero
+- `materialized.py:618` → la caché que la alimenta
+- `growth_scoring.accuracy_report()` → por confianza y por horizonte
+- el bloque "lo que se publica" del reporte matutino
+- la sala de predicciones, que muestra desenlaces individuales
+
+**No es una violación del cegado.** B no queda aislada: aporta ~105 de ~1,275
+predicciones tras una semana, un 8%. Y la cohorte A corrió en condiciones
+idénticas — el producto mostró sus desenlaces conforme caían, y A sigue siendo
+una evaluación prospectiva válida porque lo congelado era la **selección** y lo
+pre-registrado era el **análisis**. Cegar el producto un mes significaría
+apagarlo.
+
+**Sí es una brecha de divulgación.** Desde el 10-06 la cifra publicada cambia de
+significado en silencio: "precisión 22.2%" pasa a ser una mezcla de pre-A, A y B.
+Quien compare dos capturas a través de esa frontera necesita saberlo, y para eso
+existe este archivo.
+
+**Y queda un canal de inferencia débil:** con aritmética deliberada día contra
+día se puede despejar la contribución de B del agregado. No se puede cerrar sin
+apagar el producto; la mitigación es el compromiso de no hacerlo, que es lo que
+el punto 8 ya dice.
+
+### El invariante, para no depender de volver a auditar
+
+`test_fugas_cohorte_b.py` fija por AST que nadie fuera de `replicacion.py` pueda
+importar `cargar`, `diferencia_entre_cohortes`, `por_novedad`,
+`intervalo_agrupado`, `Cohorte`, `_predicciones` ni `_tasa_base`; que los
+consumidores sigan siendo exactamente tres; que las consultas con ventana sigan
+siendo cinco; y que ninguna ventana de monitoreo alcance el arranque de B.
+
+Verificado que no es vacuo: rechaza un import de `cargar` y acepta uno de
+`estado_b`.
+
+### Una nota sobre las pruebas de hoy
+
+Cuatro veces hoy una prueba que escaneaba **texto** se tropezó con la prosa que
+explicaba el arreglo: el comentario que cita `_linea(b)`, el docstring que cita
+`select * from prediction_ledger`, el que menciona `youtube_channels`, y los tres
+archivos que mencionan `replicacion.py` sin importarlo. Las cuatro se rehicieron
+con AST, donde los comentarios no existen. Y una quinta era **vacua** —buscaba la
+fuga dentro de una rama cuando estaba antes de ella— y se detectó corriéndola
+contra el código viejo, no leyéndola.
+
+---
+
+## 2026-09-25 — La ventana de medición era 2.8 h más corta de lo declarado
+
+**Commit:** pendiente. **Se declara seis días antes de la lectura**, con el
+número medido antes de tocar una sola línea.
+
+Una revisión externa del código encontró que `due_at` se guarda con desfase
+local y se comparaba **como texto** contra un instante en UTC:
+
+```
+due_at   '2026-09-25T06:00:00-05:00'   (= 11:00 UTC)
+ahora    '2026-09-25T06:10:19+00:00'
+```
+
+Como cadenas, `'06:00:00-05:00' < '06:10:19+00:00'`, aunque ocurra cinco horas
+después. La tarea horaria de las 06:10 UTC seleccionaba el lote del día cuando
+su ventana aún no había cerrado — cierra a las 09:00 UTC.
+
+**Medido sobre la cohorte pre-registrada, antes de corregir:**
+
+| | |
+|---|---|
+| evaluadas antes de cerrar su ventana | **315 de 360** |
+| adelanto promedio | **2.79 h** (máx. 2.83 h) |
+| ventana real medida | 6 d 21 h en vez de 7 d |
+
+**La dirección del sesgo va contra el sistema.** Un máximo sobre una ventana más
+corta solo puede ser menor o igual, nunca mayor: el pico se midió de menos. Y
+como la tasa base sí usa 7 días exactos, el lift publicado también sale por
+debajo del real.
+
+**Cuánto costó, recalculado con la ventana completa** (solo lectura, sin tocar
+el ledger): de las 315, **9** tenían un pico mayor en el tramo que faltaba,
+**2** cambiaban de resultado y **1** pasaba a ser acierto. Un acierto sobre 345:
+la cohorte iría de 28.4% a 28.7%.
+
+**Qué se corrige y qué no.** Se corrige la comparación —instantes, no texto— en
+los **cuatro** sitios donde estaba el mismo defecto: la selección para evaluar,
+el detector de inanición, el health check y el reporte matutino. Ninguno tocaba
+la vara ni el ranking.
+
+**No se recalculan las dos predicciones afectadas.** Reescribir resultados ya
+publicados en la cadena, seis días antes de la lectura y en dirección favorable,
+se ve peor que el error — aunque sea correcto. Queda declarado y se lee el 1 de
+octubre con la cifra tal como está.
+
+**Efecto visible desde hoy:** las evaluaciones pasan de ocurrir a las 06:10 UTC
+a hacerlo a las 11:10, que es cuando de verdad vencen. Los resultados del día
+aparecerán unas cinco horas más tarde que antes.
+
+**Consecuencia para la cohorte:** las ~345 ya resueltas se midieron con 6 d 21 h
+y las ~105 restantes se medirán con los 7 días declarados. La inconsistencia se
+declara aquí; corregir hacia la regla pre-registrada pareció mejor que sostener
+un defecto conocido por homogeneidad.
+
+---
+
+## 2026-09-08 — El 17.6% histórico nunca fue la tasa del sistema actual
+
+**Commit:** pendiente.
+
+**Qué disparó la revisión.** La cohorte pre-registrada llegó a n=105 con 26.7%
+de acierto, muy por encima del 17.6% retrospectivo. Lo normal es lo contrario:
+una cifra retrospectiva está inflada por haber elegido la vara mirando los datos,
+así que hacia adelante suele **bajar**. Que suba pide explicación antes de
+creérsela.
+
+**Lo que se descartó primero.** Que el sistema hubiera cambiado bajo el
+experimento. `horizon_model.joblib` es del 2026-08-05 y ninguna tarea programada
+lo reentrena — se verificó. El modelo está congelado desde antes del
+pre-registro.
+
+**Lo que sí ocurrió.** El acierto sube de forma monótona desde finales de julio,
+y la tasa base del universo no:
+
+| semana | n | acierto | tasa base del universo |
+|---|---|---|---|
+| W30 | 53 | 9.4% | 9.0% |
+| W31 | 90 | 11.1% | 7.7% |
+| W32 | 105 | 17.1% | 8.7% |
+| W33 | 105 | 25.7% | 7.7% |
+| W34 | 90 | 27.8% | 10.8% |
+| W35 | 30 | 30.0% | 10.2% |
+
+La base oscila entre 7.7% y 10.8% sin tendencia, así que **no estaba más fácil
+para todos**. Lo que mejoró fueron los insumos del mismo modelo: el piso de 50
+espectadores (2026-08-01), el WAL de 31 GB, el lote que tardaba 399 minutos y
+llegaba con snapshots viejos, y las etiquetas que llevaban dos semanas sin
+reconstruirse.
+
+**Y el detalle que importa para el experimento:** ese ascenso terminó en la
+W33–W34, *antes* del pre-registro del 26 de agosto. Para cuando se congeló, el
+sistema ya corría entre 25% y 28%.
+
+| cohorte | acierto | IC95 |
+|---|---|---|
+| emitidas antes del 2026-08-26 | 68/401 = **17.0%** | 13.6 – 20.9 |
+| emitidas desde el 2026-08-26 | 28/105 = **26.7%** | 19.1 – 35.8 |
+
+**Qué se afirma y qué no.** El 26.7% prospectivo **no es una mejora ni suerte:
+es continuidad** con lo que el sistema ya venía haciendo desde mediados de
+agosto. Lo que estaba mal era usar el promedio histórico como si describiera al
+sistema de hoy.
+
+El 17.6% **no se corrige ni se retira**: es el histórico verdadero y se sigue
+publicando. Lo que se añade es qué es — el promedio de un sistema que se estaba
+arreglando, y por eso subestima al actual. Decir en cambio "en realidad vamos en
+26.7%" sería exactamente la lectura selectiva que este archivo existe para
+impedir.
+
+**Señal de que son poblaciones distintas y no una cifra inflada:** el intervalo
+prospectivo (19.1 – 35.8) ya casi no contiene al 17.6%.
+
+**Lo que NO cambia.** La fecha de lectura sigue siendo el 2026-10-08. Este
+hallazgo no adelanta nada ni justifica leer antes.
+
+---
+
+# Compromisos abiertos
+
+Instrumentación que **todavía no mueve ningún número publicado**, pero que fija
+por adelantado bajo qué condiciones se permitirá moverlos. Se escribe antes de
+tener resultados a propósito: declarar el criterio de éxito después de ver los
+datos es la forma más fácil de engañarse.
+
+---
+
+## 2026-10-06 (5) — El tablero se parte por plataforma cuando CIERRE la cohorte de YouTube
+
+Decidido hoy, con la condición escrita por adelantado para que no se decida
+después mirando cuál partición se ve mejor.
+
+### El problema que sí se arregló hoy
+
+Las seis cifras del titular del tablero salen de `prediction_ledger`, que es
+**Twitch: 1,198 de 1,200 filas**. Ninguna etiqueta lo decía — "Precisión de
+predicción", "Tasa base (azar elegible)"— mientras Creator Pulse, en la misma
+pantalla, muestra creadores de YouTube.
+
+Un lector concluye razonablemente que el 20.7% cubre las dos plataformas. No las
+cubre. El punto 6 del protocolo de YouTube ya prohibía esa lectura, pero la
+prohibía en un archivo y no en la pantalla donde se comete. Ahora el aviso está
+en la copia permanente del tablero, en los tres idiomas.
+
+### Por qué el split se difiere, y hasta cuándo exactamente
+
+Hoy sería un cuarto vacío: **15 predicciones de YouTube, 0 cerradas**. Y peor,
+partir la pantalla pone 1.885% y 9.79% uno al lado del otro, que es justo la
+comparación por razón que el punto 6 prohíbe.
+
+**La condición de disparo es que la cohorte de YouTube CIERRE** —450
+predicciones cerradas, hacia el **2026-11-06**— y no que tenga sus primeros
+resultados cerrados.
+
+La distinción importa y es fácil de confundir: con horizonte de 24 h, las
+primeras 15 cierran **el 2026-10-07**, o sea mañana. Pero el punto 9 las tiene
+cegadas hasta el cierre de la cohorte, así que entre el 10-07 y el ~11-06 habría
+resultados cerrados que **no se pueden mostrar**. Una sección de YouTube abierta
+en ese tramo tendría que enseñar un censo y callar los aciertos, que es más
+confuso que no tener la sección.
+
+### Qué NO es motivo para adelantarlo
+
+Que el split sea trabajo de presentación y no de selección —o sea que no anula
+ninguna cohorte— es cierto y no viene al caso. Lo que lo difiere no es el riesgo
+metodológico: es que no hay nada que mostrar y que mostrarlo a medias invita a la
+lectura que el protocolo prohíbe.
+
+### Lo que queda verificado de paso: el brazo ciego no se filtra
+
+| camino | estado |
+| --- | --- |
+| `informe()` | reserva aciertos, tasa y efecto hasta que cierre B |
+| el tablero | **cero** referencias a `blind_prediction_ledger` |
+| la cadena pública | exporta sólo `prediction_ledger`: **0 de los 12 ids** del brazo aparecen |
+
+El tablero está cegado por **separación de tabla**, no por un filtro que alguien
+tenga que recordar — más robusto que los seis topes de la entrada anterior,
+porque no hay nada que olvidar.
+
+El tercero es el de más consecuencia: publicar el grupo de control no filtraría
+una cifra, **destruiría el experimento**, porque le daría a los creadores de
+control exactamente la audiencia que el brazo existe para negarles. Comprobado
+cruzando los 12 ids contra la cadena publicada, no leyendo el código.
+
+**Una vía de contaminación menor queda abierta y escrita:** Creator Pulse sortea
+creadores elegibles, así que uno del brazo puede aparecer ahí por azar (6 fichas
+sobre ~3,090 por carga). Es exposición al control, pero de otro orden que la
+sección dedicada de los 15 publicados. No se tapa: taparla exigiría que el
+sorteo conozca el brazo, y entonces el tablero leería la tabla ciega.
+
+---
 
 ## 2026-10-05 (6) — Brazo ciego: quince predicciones diarias que no se publican
 
@@ -1166,74 +1383,7 @@ de darla por buena.
 
 20 pruebas nuevas, suite completa en 314.
 
-## 2026-10-05 (5) — Búsqueda sistemática de fugas: no hay una tercera
-
-Después de encontrar dos fugas del cegado el mismo día, se buscó una tercera de
-forma sistemática en vez de por intuición. **No existe.**
-
-El criterio: un camino filtra si lee `prediction_ledger`, incluye filas con
-`created_at >= 2026-10-06`, expone desenlace, y es alcanzable antes del cierre.
-
-| verificación | resultado |
-|---|---|
-| consultas que ventanean el ledger por `created_at` | **5 en todo el código**, las cinco justificadas |
-| consumidores externos de `replicacion` | los 3 importan solo `estado_b`, nunca `cargar()` |
-| tablero, modo inversionista | ciega primero **y** pone `f_issued = 0` |
-| `continuation.py` | lee `twitch_horizon_labels`, no predicciones |
-| `ledger_audit.py` | verifica coherencia, no calcula tasas |
-
-Las cinco consultas con ventana: tres en `replicacion.py` (cegadas por diseño y
-solo alcanzables desde dentro del módulo), una en `monitoreo_mitades.py` (cerrada
-hoy en el arranque de B) y una en `youtube_cohorte.py` (tabla propia).
-
-### Lo que sí hay, y es distinto de una fuga
-
-**Seis superficies agregan todo el histórico sin aislar a B**, y desde el
-2026-10-06 la incluyen:
-
-- `ledger_summary()` → la precisión publicada del tablero
-- `materialized.py:618` → la caché que la alimenta
-- `growth_scoring.accuracy_report()` → por confianza y por horizonte
-- el bloque "lo que se publica" del reporte matutino
-- la sala de predicciones, que muestra desenlaces individuales
-
-**No es una violación del cegado.** B no queda aislada: aporta ~105 de ~1,275
-predicciones tras una semana, un 8%. Y la cohorte A corrió en condiciones
-idénticas — el producto mostró sus desenlaces conforme caían, y A sigue siendo
-una evaluación prospectiva válida porque lo congelado era la **selección** y lo
-pre-registrado era el **análisis**. Cegar el producto un mes significaría
-apagarlo.
-
-**Sí es una brecha de divulgación.** Desde el 10-06 la cifra publicada cambia de
-significado en silencio: "precisión 22.2%" pasa a ser una mezcla de pre-A, A y B.
-Quien compare dos capturas a través de esa frontera necesita saberlo, y para eso
-existe este archivo.
-
-**Y queda un canal de inferencia débil:** con aritmética deliberada día contra
-día se puede despejar la contribución de B del agregado. No se puede cerrar sin
-apagar el producto; la mitigación es el compromiso de no hacerlo, que es lo que
-el punto 8 ya dice.
-
-### El invariante, para no depender de volver a auditar
-
-`test_fugas_cohorte_b.py` fija por AST que nadie fuera de `replicacion.py` pueda
-importar `cargar`, `diferencia_entre_cohortes`, `por_novedad`,
-`intervalo_agrupado`, `Cohorte`, `_predicciones` ni `_tasa_base`; que los
-consumidores sigan siendo exactamente tres; que las consultas con ventana sigan
-siendo cinco; y que ninguna ventana de monitoreo alcance el arranque de B.
-
-Verificado que no es vacuo: rechaza un import de `cargar` y acepta uno de
-`estado_b`.
-
-### Una nota sobre las pruebas de hoy
-
-Cuatro veces hoy una prueba que escaneaba **texto** se tropezó con la prosa que
-explicaba el arreglo: el comentario que cita `_linea(b)`, el docstring que cita
-`select * from prediction_ledger`, el que menciona `youtube_channels`, y los tres
-archivos que mencionan `replicacion.py` sin importarlo. Las cuatro se rehicieron
-con AST, donde los comentarios no existen. Y una quinta era **vacua** —buscaba la
-fuga dentro de una rama cuando estaba antes de ella— y se detectó corriéndola
-contra el código viejo, no leyéndola.
+---
 
 ## 2026-10-05 (4) — Cohorte B DECLARADA, y el cegado que faltaba
 
@@ -1318,6 +1468,8 @@ comprobación de integridad, arreglar los instaladores. Nada de eso toca
 `intelligence.py` ni `analytics.py`, que siguen sin un commit desde el
 2026-08-26.
 
+---
+
 ## 2026-10-05 (3) — Pre-registro de la cohorte de YouTube
 
 **Commit:** este mismo. **La cohorte todavía NO está declarada**: en
@@ -1388,6 +1540,8 @@ dos semanas antes**.
 Crear la tabla y enganchar la emisión diaria. Declarar antes de eso dejaría una
 fecha de arranque anterior al primer lote, que es justo lo que el punto 1
 prohíbe. 18 pruebas nuevas, suite completa en 225.
+
+---
 
 ## 2026-10-05 (2) — El backtest de YouTube, y por qué el 10.40× no es la cifra
 
@@ -1517,6 +1671,8 @@ Confirma que el mecanismo de la edad es casi absoluto.
 Ni pre-registro, ni tabla propia, ni una sola predicción de YouTube emitida.
 `prediction_ledger` tiene 1,168 de Twitch y 2 anotadas cross-platform.
 
+---
+
 ## 2026-10-05 — La vara absoluta de YouTube, declarada antes de medirla
 
 Para que YouTube pueda tener una cohorte prospectiva hacía falta primero una
@@ -1639,6 +1795,8 @@ Ni ranker, ni pre-registro, ni una sola predicción de YouTube emitida:
 son notas cross-platform. **Esta entrada no reporta ningún resultado de
 YouTube** — fija la vara con la que se van a medir.
 
+---
+
 ## 2026-10-03 — El score no está calibrado, y dentro del Top 15 no ordena
 
 **Commit:** este mismo. **No cambia todavía ninguna cifra publicada**, pero sí
@@ -1687,6 +1845,8 @@ a *"Draconfly Score >= 75"*.
 
 **Lo que sí se puede afirmar del score:** que sirve para elegir a los 15.
 **Lo que no:** que ordene dentro de los 15.
+
+---
 
 ## 2026-10-03 — Cohorte B: replicación prospectiva predeclarada
 
@@ -1804,6 +1964,8 @@ Lo que **no** se podrá afirmar aunque replique: nada fuera de Twitch, nada sobr
 categorías que no entran al top 10, y nada sobre el orden *dentro* de las 15
 publicadas — ver la nota del 2026-10-03 sobre la calibración del score.
 
+---
+
 ## 2026-08-26 — Se fija una vara nueva ANTES de aplicarla
 
 **Commit:** pendiente — esta nota se escribe deliberadamente antes de tocar código.
@@ -1908,6 +2070,261 @@ discrimina; no es todavía la demostración.
 > La vara se aplicó al día siguiente. Lo que movió en pantalla, y el error que
 > apareció al aplicarla, están en **2026-08-27 — Se aplica la vara nueva, y una
 > columna se queda atrás**, en la sección anterior.
+
+---
+
+## 2026-09-16 — Las 225 predicciones de la cohorte no son 225 pruebas independientes
+
+**Commit:** pendiente. **No cambia nada medido ni publicado**: se declara antes
+de la lectura del 2026-10-08, que es cuando una limitación todavía cuenta como
+honestidad y no como excusa.
+
+Revisando por qué la cohorte saltó de 27.7% a 30.7% en un día —un número bueno
+de más merece más auditoría que uno malo— el salto resultó legítimo: las
+etiquetas están sanas (entre **8.0% y 11.1%** de éxito por día ancla, coherente
+con la tasa base de 10.2%) y los lotes recientes, 26.7% tres días seguidos, caen
+dentro del rango ya observado, que va de **6.7% a 33.3%** por lote.
+
+Pero al mirar de cerca aparecieron dos cosas sobre la **independencia** de la
+muestra:
+
+**1. Siete aciertos son el mismo despegue contado otra vez.** Dos predicciones
+del mismo creador con ventanas solapadas pueden mirar el mismo pico:
+
+| creador | pico | lotes |
+|---|---|---|
+| eslcs | 8,324 | 08-27, 08-30, 09-02 |
+| lacyoffline_ | 2,393 | 09-07, 09-08 |
+| franciscoow | 1,632 | 09-03, 09-07 |
+| allinyonok | 483 | 09-05, 09-06 |
+| kusaka6e | 1,172 | 09-02, 09-03 |
+| viperriven247 | 479 | 08-30, 09-02 |
+
+De 69 aciertos hay **62 despegues distintos**. Contando cada uno una sola vez la
+tasa pasa de **30.7% a 27.6%** — sigue muy por encima del 10.2% de la tasa base,
+pero la cifra publicada está unos 3 puntos arriba de lo que sostiene un conteo
+por evento.
+
+**2. El intervalo es más estrecho de lo que la muestra justifica.** Hay **155
+creadores distintos en 225 predicciones**, y 44 aparecen más de una vez. Las
+pruebas correlacionadas reducen el tamaño efectivo de muestra, así que el IC real
+es algo más ancho que el ±6 pp que se imprime.
+
+**Qué NO se hace.** No se toca la regla, que es lo correcto: la unidad
+pre-registrada es la predicción, no el creador, y cambiarla ahora sería mover la
+portería con el resultado a la vista. La tasa base se calcula sobre las mismas
+anclas repetidas, así que el sesgo no es obviamente a favor.
+
+**Qué sí se hará el 2026-10-08:** publicar las dos cifras, por predicción y por
+despegue distinto, y decir que el intervalo es una cota optimista. Para un
+pre-registro futuro, la unidad debería ser el evento o imponerse un enfriamiento
+por creador.
+
+**CUMPLIDO el 2026-10-01** (la lectura llegó por las 450 vencidas, antes de la
+fecha límite). Se publicaron las dos cifras — 26.7% por predicción y 23.1% por
+despegue distinto, 16 aciertos colapsados de 120 — y el intervalo optimista se
+contrastó contra un bootstrap por conglomerados. Ver la entrada del 2026-10-01 en
+los cambios de arriba.
+
+---
+
+## 2026-09-05 — Se fija CUÁNDO se lee el resultado, con el número ya a favor
+
+**Commit:** pendiente — se escribe antes de saber si el resultado aguanta.
+
+**El agujero.** El 2026-08-26 se fijó la vara pero no *cuándo se lee*. El
+criterio quedó como "el lift se da por demostrado si el intervalo de la
+diferencia queda entero por encima de cero" — sin decir en qué momento se
+comprueba eso. Y "esperar a que el intervalo excluya el cero, revisando cada
+mañana" es una regla que se cumple sola.
+
+**Medido con simulación**, con la tasa verdadera IGUAL a la tasa base, o sea sin
+ningún efecto real, mirando el intervalo cada día conforme llegan lotes de 15:
+
+| días mirando | cruza el cero por azar |
+|---|---|
+| 5 | 9.1% |
+| 10 | 10.9% |
+| 20 | 14.0% |
+| 30 | **15.6%** |
+
+Una sola mirada daría ~2.5%. Uno de cada seis experimentos **sin efecto alguno**
+acaba cruzando si se mira a diario durante un mes. Es *optional stopping*, y es
+la versión temporal del mismo error que se corrigió el 2026-08-26: probar trece
+varas y quedarse con la mejor.
+
+**Lo que se declara desde hoy.**
+
+> El resultado de la cohorte pre-registrada se lee el **2026-10-08**, o al
+> alcanzar **450 predicciones vencidas**, lo que ocurra primero. Las lecturas
+> diarias son monitoreo, no resultado. Si el intervalo cruza el cero antes y
+> vuelve a cruzarlo después, ninguna de las dos cosas cuenta.
+
+**Por qué hoy y no en octubre.** El 2026-09-04 el veredicto pasó a `supera` con
+n=45 (lift +11.0 pp, IC +1.2 a +25.1) y el 09-05 se mantuvo con n=60 (+10.6 pp,
+IC +2.0 a +22.6). O sea que **la cifra ya está a favor**, y comprometerse ahora a
+esperar cuesta algo. Declarar la misma regla en octubre, con el resultado en la
+mano, no valdría nada.
+
+**Qué NO cambia.** Nada operativo. El veredicto solo elige un texto en pantalla
+—se verificó: `record-predictions` y `evaluate-predictions` no lo consultan— así
+que el lote diario, la evaluación al vencer y todo lo que muestra el Investor
+Demo siguen igual y siguen actualizándose. Ninguna predicción queda en espera.
+
+**Qué sí cambia en pantalla.** El veredicto se muestra como **provisional** hasta
+la fecha de lectura. Sin eso, la casilla diría `supera` un día y `no concluyente`
+al siguiente, y quien la viera dos veces concluiría que el sistema es errático
+cuando lo errático sería leer un intervalo de veinte puntos como si fuera una
+respuesta.
+
+**CUMPLIDO el 2026-10-01.** Se disparó la primera de las dos condiciones — 450
+vencidas — siete días antes de la fecha límite. Se esperó 26 días desde esta
+declaración sin tocar la vara, el modelo ni la selección, y sin leer el resultado
+como si fuera definitivo. El veredicto quedó en `supera`, ya sin la etiqueta de
+provisional. Ver la entrada del 2026-10-01 en los cambios de arriba.
+
+---
+
+## 2026-08-30 — P2 (Continuación): se define el episodio ANTES de medirlo
+
+**Commit:** pendiente — esta nota se escribe antes de que exista una sola cifra
+pre-registrada de P2.
+
+**La pregunta.** P1 responde *"¿este creador va a romper?"*. P2 responde la
+siguiente, que es la que un comprador realmente paga: *"ya rompió — ¿todavía
+vale la pena entrar, o llegué tarde?"*. Para una marca, saber que alguien ya
+creció tiene valor limitado; saber si le queda recorrido es una decisión de
+dinero.
+
+**Qué es un episodio de breakout.** Un canal recibe un ancla por día, así que un
+mismo despegue aparece como diez anclas `hit_strong` seguidas. Contarlas como
+diez episodios inflaría cualquier resultado.
+
+- **Episodio** = racha máxima de anclas `hit_strong` del mismo canal, tolerando
+  huecos de hasta 1 día.
+- **Detección** = el **primer** ancla de la racha, no el de mayor pico.
+- **Referencia P** = el pico de la ventana de breakout de ese primer ancla.
+
+El primero, y no el máximo, a propósito: la pregunta del producto es *"lo vimos
+en 52K, ¿queda recorrido?"*, así que el punto de comparación tiene que ser el
+momento en que lo habríamos avisado. Tomar el pico máximo pregunta otra cosa
+—*"¿superará su mejor día?"*— que es más difícil y no es la que se vende.
+
+**Esa sola elección movía la tasa base de 14.3% a 2.6%.** Por eso se fija por
+escrito antes de medir, y por eso queda registrado que se probaron las dos.
+
+**Qué cuenta como continuación**, sobre `[detección+7d, detección+21d]` contra P:
+
+| resultado | criterio |
+|---|---|
+| CONTINUATION | pico posterior ≥ 1.5 × P |
+| PLATEAU | pico posterior ≥ 0.5 × P |
+| REVERSION | pico posterior < 0.5 × P |
+| OFFLINE | sin un solo snapshot en vivo |
+
+Solo snapshots con `live = 1`: un canal apagado reporta 0, y eso no es una caída
+de audiencia, es que no estaba al aire.
+
+**El horizonte es 14 días, no 30/60/90.** Los snapshots empiezan el 2026-07-11.
+A 30 días hay 241 episodios etiquetables; **a 60 y a 90 hay cero**, y los habrá
+a finales de octubre y de noviembre. Publicar hoy una probabilidad a 60 días
+sería inventarla.
+
+**La tasa base, medida sobre el histórico:**
+
+| resultado | n | % de los que siguieron al aire |
+|---|---|---|
+| CONTINUATION | 47 | **14.3%** (IC95 10.9–18.5) |
+| PLATEAU | 166 | 50.6% |
+| REVERSION | 115 | **35.1%** |
+| OFFLINE | 7 | — |
+
+Sobre 335 episodios evaluados de 531 detectados.
+
+**Qué hace esto prometedor.** Solo 1 de cada 7 sigue acelerando, así que hay
+ventaja que demostrar — no es una moneda al aire, que era el problema de la vara
+vieja de P1. Y 1 de cada 3 se desploma: *"no entres"* es tan vendible como
+*"entra"*.
+
+**Qué NO se afirma todavía.** Nada. Las cifras de arriba son retrospectivas y la
+definición de episodio se fijó mirando ese mismo histórico. Lo que valdrá como
+evidencia son los episodios detectados **desde el 2026-08-30**, con esta
+definición ya cerrada. Hoy son cero.
+
+**Qué NO cambia.** P1 no se toca. Su cohorte pre-registrada del 2026-08-26 sigue
+intacta, con 75 predicciones emitidas y la primera venciendo el 2026-09-02. P2
+tiene tabla propia (`continuation_ledger`), vara propia y reloj propio.
+
+**Un hallazgo que hay que verificar con más datos.** Entre los episodios
+evaluados, los breakouts **más grandes** son los que más se desploman: el
+crecimiento mediano de los que revirtieron fue mayor que el de los que
+continuaron. Es reversión a la media y sería comercialmente valioso —diría que
+el breakout más llamativo es la peor apuesta— pero con esta muestra es una
+hipótesis, no un resultado.
+
+---
+
+## 2026-08-01 — Trend Uncertainty Index (TUI): recolección iniciada
+
+**Commit:** `e2b97d3`
+
+**Qué se empezó a guardar.** Desde esta fecha, cada predicción registra cinco
+variables que describen **cuánto sabíamos del creador en el momento de predecir**
+(columnas `u_*` en `prediction_ledger`):
+
+| variable | qué captura |
+|---|---|
+| `u_observations` | lecturas horarias disponibles del canal |
+| `u_tracked_days` | días desde la primera observación |
+| `u_viewer_cv` | volatilidad de la audiencia en vivo (desviación / media) |
+| `u_direction_changes` | veces que el movimiento hora a hora cambió de signo |
+| `u_live_ratio` | proporción de lecturas con el canal transmitiendo |
+
+Todas se calculan **únicamente con datos anteriores a la predicción**, de modo que
+no pueden contener información del futuro.
+
+**Qué NO se hizo, y por qué.** No se calculó ni se publicó ningún índice. El
+2026-08-01 el pipeline empezó a filtrar a creadores con más de 50 viewers
+promedio; las 105 predicciones anteriores describen una población que el sistema
+ya no produce. Ajustar un índice a ellas sería ajustarlo a un pasado
+descontinuado.
+
+**Cómo se modificó el tablero.** Se agregó la pestaña *TUI (incertidumbre)*, que
+muestra las variables recolectadas y declara de forma explícita que todavía no
+existe un índice. **Ningún indicador publicado cambió.**
+
+**El compromiso, por escrito y por adelantado.** Un índice de incertidumbre solo
+se publicará si supera esta prueba contra el historial verificado:
+
+> Las predicciones con TUI bajo deben acertar **significativamente más** que las
+> de TUI alto. Cada variable que no aporte a esa separación se descarta en vez de
+> conservarse por parecer razonable.
+
+Si la prueba falla, el resultado honesto es no publicar índice alguno y decirlo.
+Esta entrada existe para que esa promesa quede fechada antes de conocer el
+resultado, y no pueda reescribirse después.
+
+**Cuándo será evaluable.** Cuando existan del orden de 200 predicciones emitidas
+bajo el pipeline actual y ya verificadas — aproximadamente tres semanas a un
+ritmo de 15 diarias con ventana de verificación de 7 días.
+
+---
+
+# Incidentes de operación
+
+Fallos de tubería que **no movieron ninguna cifra publicada** y tampoco fijan
+una condición futura: respaldos, tareas programadas, mudanzas de disco,
+vigilantes que mataron lo que debían proteger.
+
+Van aparte porque la cabecera de este archivo dice que la infraestructura no se
+lista aquí salvo que haya alterado lo que el tablero mostraba — y ninguno de
+éstos lo alteró. Pero tampoco se borran: son el historial de qué se rompió y
+cómo se encontró, que es justamente lo que hace creíble el resto del archivo.
+
+Se separaron el 2026-10-06. Hasta entonces estaban mezclados con los cambios que
+sí movieron números, lo que dejaba sin sentido las dos secciones.
+
+---
 
 ## 2026-09-27 — La red de seguridad estaba matando lo que debía proteger
 
@@ -2046,62 +2463,6 @@ Importa más de lo que parece: una reja que siempre está roja no protege de nad
 porque una violación nueva de verdad pasa inadvertida entre el ruido. **La suite
 queda en 89 pruebas, todas en verde** — la primera vez desde que se lleva esta
 bitácora.
-
----
-
-## 2026-09-25 — La ventana de medición era 2.8 h más corta de lo declarado
-
-**Commit:** pendiente. **Se declara seis días antes de la lectura**, con el
-número medido antes de tocar una sola línea.
-
-Una revisión externa del código encontró que `due_at` se guarda con desfase
-local y se comparaba **como texto** contra un instante en UTC:
-
-```
-due_at   '2026-09-25T06:00:00-05:00'   (= 11:00 UTC)
-ahora    '2026-09-25T06:10:19+00:00'
-```
-
-Como cadenas, `'06:00:00-05:00' < '06:10:19+00:00'`, aunque ocurra cinco horas
-después. La tarea horaria de las 06:10 UTC seleccionaba el lote del día cuando
-su ventana aún no había cerrado — cierra a las 09:00 UTC.
-
-**Medido sobre la cohorte pre-registrada, antes de corregir:**
-
-| | |
-|---|---|
-| evaluadas antes de cerrar su ventana | **315 de 360** |
-| adelanto promedio | **2.79 h** (máx. 2.83 h) |
-| ventana real medida | 6 d 21 h en vez de 7 d |
-
-**La dirección del sesgo va contra el sistema.** Un máximo sobre una ventana más
-corta solo puede ser menor o igual, nunca mayor: el pico se midió de menos. Y
-como la tasa base sí usa 7 días exactos, el lift publicado también sale por
-debajo del real.
-
-**Cuánto costó, recalculado con la ventana completa** (solo lectura, sin tocar
-el ledger): de las 315, **9** tenían un pico mayor en el tramo que faltaba,
-**2** cambiaban de resultado y **1** pasaba a ser acierto. Un acierto sobre 345:
-la cohorte iría de 28.4% a 28.7%.
-
-**Qué se corrige y qué no.** Se corrige la comparación —instantes, no texto— en
-los **cuatro** sitios donde estaba el mismo defecto: la selección para evaluar,
-el detector de inanición, el health check y el reporte matutino. Ninguno tocaba
-la vara ni el ranking.
-
-**No se recalculan las dos predicciones afectadas.** Reescribir resultados ya
-publicados en la cadena, seis días antes de la lectura y en dirección favorable,
-se ve peor que el error — aunque sea correcto. Queda declarado y se lee el 1 de
-octubre con la cifra tal como está.
-
-**Efecto visible desde hoy:** las evaluaciones pasan de ocurrir a las 06:10 UTC
-a hacerlo a las 11:10, que es cuando de verdad vencen. Los resultados del día
-aparecerán unas cinco horas más tarde que antes.
-
-**Consecuencia para la cohorte:** las ~345 ya resueltas se midieron con 6 d 21 h
-y las ~105 restantes se medirán con los 7 días declarados. La inconsistencia se
-declara aquí; corregir hacia la regla pre-registrada pareció mejor que sostener
-un defecto conocido por homogeneidad.
 
 ---
 
@@ -2255,61 +2616,6 @@ probarla sin Task Scheduler, que es justo la parte que no se puede simular:
 **Efecto inmediato:** el único aviso que queda en el health check es real —
 `Collect Requested Topics` cortada por su límite de tiempo— en vez de estar
 escondido detrás de uno permanente.
-
----
-
-## 2026-09-16 — Las 225 predicciones de la cohorte no son 225 pruebas independientes
-
-**Commit:** pendiente. **No cambia nada medido ni publicado**: se declara antes
-de la lectura del 2026-10-08, que es cuando una limitación todavía cuenta como
-honestidad y no como excusa.
-
-Revisando por qué la cohorte saltó de 27.7% a 30.7% en un día —un número bueno
-de más merece más auditoría que uno malo— el salto resultó legítimo: las
-etiquetas están sanas (entre **8.0% y 11.1%** de éxito por día ancla, coherente
-con la tasa base de 10.2%) y los lotes recientes, 26.7% tres días seguidos, caen
-dentro del rango ya observado, que va de **6.7% a 33.3%** por lote.
-
-Pero al mirar de cerca aparecieron dos cosas sobre la **independencia** de la
-muestra:
-
-**1. Siete aciertos son el mismo despegue contado otra vez.** Dos predicciones
-del mismo creador con ventanas solapadas pueden mirar el mismo pico:
-
-| creador | pico | lotes |
-|---|---|---|
-| eslcs | 8,324 | 08-27, 08-30, 09-02 |
-| lacyoffline_ | 2,393 | 09-07, 09-08 |
-| franciscoow | 1,632 | 09-03, 09-07 |
-| allinyonok | 483 | 09-05, 09-06 |
-| kusaka6e | 1,172 | 09-02, 09-03 |
-| viperriven247 | 479 | 08-30, 09-02 |
-
-De 69 aciertos hay **62 despegues distintos**. Contando cada uno una sola vez la
-tasa pasa de **30.7% a 27.6%** — sigue muy por encima del 10.2% de la tasa base,
-pero la cifra publicada está unos 3 puntos arriba de lo que sostiene un conteo
-por evento.
-
-**2. El intervalo es más estrecho de lo que la muestra justifica.** Hay **155
-creadores distintos en 225 predicciones**, y 44 aparecen más de una vez. Las
-pruebas correlacionadas reducen el tamaño efectivo de muestra, así que el IC real
-es algo más ancho que el ±6 pp que se imprime.
-
-**Qué NO se hace.** No se toca la regla, que es lo correcto: la unidad
-pre-registrada es la predicción, no el creador, y cambiarla ahora sería mover la
-portería con el resultado a la vista. La tasa base se calcula sobre las mismas
-anclas repetidas, así que el sesgo no es obviamente a favor.
-
-**Qué sí se hará el 2026-10-08:** publicar las dos cifras, por predicción y por
-despegue distinto, y decir que el intervalo es una cota optimista. Para un
-pre-registro futuro, la unidad debería ser el evento o imponerse un enfriamiento
-por creador.
-
-**CUMPLIDO el 2026-10-01** (la lectura llegó por las 450 vencidas, antes de la
-fecha límite). Se publicaron las dos cifras — 26.7% por predicción y 23.1% por
-despegue distinto, 16 aciertos colapsados de 120 — y el intervalo optimista se
-contrastó contra un bootstrap por conglomerados. Ver la entrada del 2026-10-01 en
-los cambios de arriba.
 
 ---
 
@@ -2581,249 +2887,6 @@ durante el congelamiento, pero el momento estuvo mal elegido: casi cuesta el
 19:00 UTC en vez de las 09:47 habituales, y se construyó sobre el snapshot de la
 tarde. No invalida la medición —la ventana sigue empezando donde termina la
 observación— pero es un día distinto de los demás y queda visible.
-
----
-
-## 2026-09-08 — El 17.6% histórico nunca fue la tasa del sistema actual
-
-**Commit:** pendiente.
-
-**Qué disparó la revisión.** La cohorte pre-registrada llegó a n=105 con 26.7%
-de acierto, muy por encima del 17.6% retrospectivo. Lo normal es lo contrario:
-una cifra retrospectiva está inflada por haber elegido la vara mirando los datos,
-así que hacia adelante suele **bajar**. Que suba pide explicación antes de
-creérsela.
-
-**Lo que se descartó primero.** Que el sistema hubiera cambiado bajo el
-experimento. `horizon_model.joblib` es del 2026-08-05 y ninguna tarea programada
-lo reentrena — se verificó. El modelo está congelado desde antes del
-pre-registro.
-
-**Lo que sí ocurrió.** El acierto sube de forma monótona desde finales de julio,
-y la tasa base del universo no:
-
-| semana | n | acierto | tasa base del universo |
-|---|---|---|---|
-| W30 | 53 | 9.4% | 9.0% |
-| W31 | 90 | 11.1% | 7.7% |
-| W32 | 105 | 17.1% | 8.7% |
-| W33 | 105 | 25.7% | 7.7% |
-| W34 | 90 | 27.8% | 10.8% |
-| W35 | 30 | 30.0% | 10.2% |
-
-La base oscila entre 7.7% y 10.8% sin tendencia, así que **no estaba más fácil
-para todos**. Lo que mejoró fueron los insumos del mismo modelo: el piso de 50
-espectadores (2026-08-01), el WAL de 31 GB, el lote que tardaba 399 minutos y
-llegaba con snapshots viejos, y las etiquetas que llevaban dos semanas sin
-reconstruirse.
-
-**Y el detalle que importa para el experimento:** ese ascenso terminó en la
-W33–W34, *antes* del pre-registro del 26 de agosto. Para cuando se congeló, el
-sistema ya corría entre 25% y 28%.
-
-| cohorte | acierto | IC95 |
-|---|---|---|
-| emitidas antes del 2026-08-26 | 68/401 = **17.0%** | 13.6 – 20.9 |
-| emitidas desde el 2026-08-26 | 28/105 = **26.7%** | 19.1 – 35.8 |
-
-**Qué se afirma y qué no.** El 26.7% prospectivo **no es una mejora ni suerte:
-es continuidad** con lo que el sistema ya venía haciendo desde mediados de
-agosto. Lo que estaba mal era usar el promedio histórico como si describiera al
-sistema de hoy.
-
-El 17.6% **no se corrige ni se retira**: es el histórico verdadero y se sigue
-publicando. Lo que se añade es qué es — el promedio de un sistema que se estaba
-arreglando, y por eso subestima al actual. Decir en cambio "en realidad vamos en
-26.7%" sería exactamente la lectura selectiva que este archivo existe para
-impedir.
-
-**Señal de que son poblaciones distintas y no una cifra inflada:** el intervalo
-prospectivo (19.1 – 35.8) ya casi no contiene al 17.6%.
-
-**Lo que NO cambia.** La fecha de lectura sigue siendo el 2026-10-08. Este
-hallazgo no adelanta nada ni justifica leer antes.
-
----
-
-## 2026-09-05 — Se fija CUÁNDO se lee el resultado, con el número ya a favor
-
-**Commit:** pendiente — se escribe antes de saber si el resultado aguanta.
-
-**El agujero.** El 2026-08-26 se fijó la vara pero no *cuándo se lee*. El
-criterio quedó como "el lift se da por demostrado si el intervalo de la
-diferencia queda entero por encima de cero" — sin decir en qué momento se
-comprueba eso. Y "esperar a que el intervalo excluya el cero, revisando cada
-mañana" es una regla que se cumple sola.
-
-**Medido con simulación**, con la tasa verdadera IGUAL a la tasa base, o sea sin
-ningún efecto real, mirando el intervalo cada día conforme llegan lotes de 15:
-
-| días mirando | cruza el cero por azar |
-|---|---|
-| 5 | 9.1% |
-| 10 | 10.9% |
-| 20 | 14.0% |
-| 30 | **15.6%** |
-
-Una sola mirada daría ~2.5%. Uno de cada seis experimentos **sin efecto alguno**
-acaba cruzando si se mira a diario durante un mes. Es *optional stopping*, y es
-la versión temporal del mismo error que se corrigió el 2026-08-26: probar trece
-varas y quedarse con la mejor.
-
-**Lo que se declara desde hoy.**
-
-> El resultado de la cohorte pre-registrada se lee el **2026-10-08**, o al
-> alcanzar **450 predicciones vencidas**, lo que ocurra primero. Las lecturas
-> diarias son monitoreo, no resultado. Si el intervalo cruza el cero antes y
-> vuelve a cruzarlo después, ninguna de las dos cosas cuenta.
-
-**Por qué hoy y no en octubre.** El 2026-09-04 el veredicto pasó a `supera` con
-n=45 (lift +11.0 pp, IC +1.2 a +25.1) y el 09-05 se mantuvo con n=60 (+10.6 pp,
-IC +2.0 a +22.6). O sea que **la cifra ya está a favor**, y comprometerse ahora a
-esperar cuesta algo. Declarar la misma regla en octubre, con el resultado en la
-mano, no valdría nada.
-
-**Qué NO cambia.** Nada operativo. El veredicto solo elige un texto en pantalla
-—se verificó: `record-predictions` y `evaluate-predictions` no lo consultan— así
-que el lote diario, la evaluación al vencer y todo lo que muestra el Investor
-Demo siguen igual y siguen actualizándose. Ninguna predicción queda en espera.
-
-**Qué sí cambia en pantalla.** El veredicto se muestra como **provisional** hasta
-la fecha de lectura. Sin eso, la casilla diría `supera` un día y `no concluyente`
-al siguiente, y quien la viera dos veces concluiría que el sistema es errático
-cuando lo errático sería leer un intervalo de veinte puntos como si fuera una
-respuesta.
-
-**CUMPLIDO el 2026-10-01.** Se disparó la primera de las dos condiciones — 450
-vencidas — siete días antes de la fecha límite. Se esperó 26 días desde esta
-declaración sin tocar la vara, el modelo ni la selección, y sin leer el resultado
-como si fuera definitivo. El veredicto quedó en `supera`, ya sin la etiqueta de
-provisional. Ver la entrada del 2026-10-01 en los cambios de arriba.
-
----
-
-## 2026-08-30 — P2 (Continuación): se define el episodio ANTES de medirlo
-
-**Commit:** pendiente — esta nota se escribe antes de que exista una sola cifra
-pre-registrada de P2.
-
-**La pregunta.** P1 responde *"¿este creador va a romper?"*. P2 responde la
-siguiente, que es la que un comprador realmente paga: *"ya rompió — ¿todavía
-vale la pena entrar, o llegué tarde?"*. Para una marca, saber que alguien ya
-creció tiene valor limitado; saber si le queda recorrido es una decisión de
-dinero.
-
-**Qué es un episodio de breakout.** Un canal recibe un ancla por día, así que un
-mismo despegue aparece como diez anclas `hit_strong` seguidas. Contarlas como
-diez episodios inflaría cualquier resultado.
-
-- **Episodio** = racha máxima de anclas `hit_strong` del mismo canal, tolerando
-  huecos de hasta 1 día.
-- **Detección** = el **primer** ancla de la racha, no el de mayor pico.
-- **Referencia P** = el pico de la ventana de breakout de ese primer ancla.
-
-El primero, y no el máximo, a propósito: la pregunta del producto es *"lo vimos
-en 52K, ¿queda recorrido?"*, así que el punto de comparación tiene que ser el
-momento en que lo habríamos avisado. Tomar el pico máximo pregunta otra cosa
-—*"¿superará su mejor día?"*— que es más difícil y no es la que se vende.
-
-**Esa sola elección movía la tasa base de 14.3% a 2.6%.** Por eso se fija por
-escrito antes de medir, y por eso queda registrado que se probaron las dos.
-
-**Qué cuenta como continuación**, sobre `[detección+7d, detección+21d]` contra P:
-
-| resultado | criterio |
-|---|---|
-| CONTINUATION | pico posterior ≥ 1.5 × P |
-| PLATEAU | pico posterior ≥ 0.5 × P |
-| REVERSION | pico posterior < 0.5 × P |
-| OFFLINE | sin un solo snapshot en vivo |
-
-Solo snapshots con `live = 1`: un canal apagado reporta 0, y eso no es una caída
-de audiencia, es que no estaba al aire.
-
-**El horizonte es 14 días, no 30/60/90.** Los snapshots empiezan el 2026-07-11.
-A 30 días hay 241 episodios etiquetables; **a 60 y a 90 hay cero**, y los habrá
-a finales de octubre y de noviembre. Publicar hoy una probabilidad a 60 días
-sería inventarla.
-
-**La tasa base, medida sobre el histórico:**
-
-| resultado | n | % de los que siguieron al aire |
-|---|---|---|
-| CONTINUATION | 47 | **14.3%** (IC95 10.9–18.5) |
-| PLATEAU | 166 | 50.6% |
-| REVERSION | 115 | **35.1%** |
-| OFFLINE | 7 | — |
-
-Sobre 335 episodios evaluados de 531 detectados.
-
-**Qué hace esto prometedor.** Solo 1 de cada 7 sigue acelerando, así que hay
-ventaja que demostrar — no es una moneda al aire, que era el problema de la vara
-vieja de P1. Y 1 de cada 3 se desploma: *"no entres"* es tan vendible como
-*"entra"*.
-
-**Qué NO se afirma todavía.** Nada. Las cifras de arriba son retrospectivas y la
-definición de episodio se fijó mirando ese mismo histórico. Lo que valdrá como
-evidencia son los episodios detectados **desde el 2026-08-30**, con esta
-definición ya cerrada. Hoy son cero.
-
-**Qué NO cambia.** P1 no se toca. Su cohorte pre-registrada del 2026-08-26 sigue
-intacta, con 75 predicciones emitidas y la primera venciendo el 2026-09-02. P2
-tiene tabla propia (`continuation_ledger`), vara propia y reloj propio.
-
-**Un hallazgo que hay que verificar con más datos.** Entre los episodios
-evaluados, los breakouts **más grandes** son los que más se desploman: el
-crecimiento mediano de los que revirtieron fue mayor que el de los que
-continuaron. Es reversión a la media y sería comercialmente valioso —diría que
-el breakout más llamativo es la peor apuesta— pero con esta muestra es una
-hipótesis, no un resultado.
-
----
-
-## 2026-08-01 — Trend Uncertainty Index (TUI): recolección iniciada
-
-**Commit:** `e2b97d3`
-
-**Qué se empezó a guardar.** Desde esta fecha, cada predicción registra cinco
-variables que describen **cuánto sabíamos del creador en el momento de predecir**
-(columnas `u_*` en `prediction_ledger`):
-
-| variable | qué captura |
-|---|---|
-| `u_observations` | lecturas horarias disponibles del canal |
-| `u_tracked_days` | días desde la primera observación |
-| `u_viewer_cv` | volatilidad de la audiencia en vivo (desviación / media) |
-| `u_direction_changes` | veces que el movimiento hora a hora cambió de signo |
-| `u_live_ratio` | proporción de lecturas con el canal transmitiendo |
-
-Todas se calculan **únicamente con datos anteriores a la predicción**, de modo que
-no pueden contener información del futuro.
-
-**Qué NO se hizo, y por qué.** No se calculó ni se publicó ningún índice. El
-2026-08-01 el pipeline empezó a filtrar a creadores con más de 50 viewers
-promedio; las 105 predicciones anteriores describen una población que el sistema
-ya no produce. Ajustar un índice a ellas sería ajustarlo a un pasado
-descontinuado.
-
-**Cómo se modificó el tablero.** Se agregó la pestaña *TUI (incertidumbre)*, que
-muestra las variables recolectadas y declara de forma explícita que todavía no
-existe un índice. **Ningún indicador publicado cambió.**
-
-**El compromiso, por escrito y por adelantado.** Un índice de incertidumbre solo
-se publicará si supera esta prueba contra el historial verificado:
-
-> Las predicciones con TUI bajo deben acertar **significativamente más** que las
-> de TUI alto. Cada variable que no aporte a esa separación se descarta en vez de
-> conservarse por parecer razonable.
-
-Si la prueba falla, el resultado honesto es no publicar índice alguno y decirlo.
-Esta entrada existe para que esa promesa quede fechada antes de conocer el
-resultado, y no pueda reescribirse después.
-
-**Cuándo será evaluable.** Cuando existan del orden de 200 predicciones emitidas
-bajo el pipeline actual y ya verificadas — aproximadamente tres semanas a un
-ritmo de 15 diarias con ventana de verificación de 7 días.
 
 ---
 
