@@ -2410,6 +2410,82 @@ sí movieron números, lo que dejaba sin sentido las dos secciones.
 
 ---
 
+
+---
+
+## 2026-10-07 — El crítico de WAL sonaba por una tarea programada que termina sola
+
+**Y el consejo que imprimía apuntaba a la base equivocada.**
+
+### Lo que pasó
+
+El reporte matutino de las 08:01 salió con `VEREDICTO: ATENCIÓN` por un crítico
+de WAL de 2,171 MB — y tres líneas más arriba, su propia medición en vivo decía
+`WAL 0.0 MB`. Dos números incompatibles en la misma pantalla.
+
+Los dos eran correctos en su momento. La serie que `wal-truncate` escribe cada
+diez minutos lo cuenta entero:
+
+```
+07:23  principal: WAL     7 MB ->     7 MB (ocupada)
+07:33  principal: WAL 1,927 MB -> 1,932 MB (ocupada)
+07:43  principal: WAL 2,184 MB -> 2,185 MB (ocupada)
+07:53  principal: WAL 1,206 MB -> 1,214 MB (ocupada)
+09:13  principal: WAL     0 MB ->     0 MB (truncado)
+```
+
+A las **07:15** `Generate Labels` reescribe ~11.9 millones de etiquetas (7.7 M
+de Twitch + 4.1 M de YouTube). El WAL pasa de 7 MB a más de 2,000 en diez
+minutos y se vacía solo en cuanto esa tarea suelta la base. El health check de
+las **07:42** cayó justo en medio y mandó un crítico; el de las **08:02** ya
+decía OK.
+
+**Esto pasa todas las mañanas.** Un crítico que suena cada día por una tarea
+programada que termina sola no vigila: enseña a ignorar los críticos. Es el
+mismo defecto que ya se corrigió con `267011` y con la cadencia de
+`Collect Requested Topics`.
+
+### El consejo estaba mal desde el 2026-08-25
+
+El mensaje decía *"Correr `archive-signal-observations` (hace checkpoint)"*.
+Ese comando opera sobre `SIGNALS_DB_PATH` desde que las señales se mudaron:
+**no le habría hecho checkpoint a la base principal**, que es la que tenía el
+WAL inflado. Seguir el consejo durante un incidente real no habría hecho nada.
+
+El que corresponde es `wal-truncate`, que desde el 2026-10-03 cubre las dos
+bases. El mensaje nuevo lo dice, y dice explícitamente que **no** es el otro.
+
+### El arreglo usa una serie que ya existía
+
+Un solo número no distingue *"el WAL está atascado"* de *"hay una escritura
+grande en curso"*, y esas dos cosas se atienden al revés: la primera hay que
+arreglarla, la segunda hay que dejarla terminar.
+
+La serie sí las distingue, y `wal-truncate` la escribe cada diez minutos
+justamente para eso — su propio comentario dice que *"la serie a lo largo del
+día es lo que identifica QUÉ trabajo infla el archivo"*. Lo único que faltaba
+era que el vigilante la leyera.
+
+Ahora, por encima del límite crítico, `check_wal_size()` mira las tres últimas
+muestras (media hora): si la base está ocupada o el archivo viene bajando, baja
+a **warning** y dice que se está drenando. Si está grande y **no** se drena,
+sigue siendo crítico.
+
+**Sin log no se ablanda el aviso.** Una ausencia de datos no puede apagar una
+alarma: sería quedarse ciego justo cuando más a ciegas se está. Una prueba lo
+fija.
+
+### Una prueba que tardaba más que lo que vigila
+
+La primera versión creaba el `-wal` de prueba escribiendo **2.2 GB de ceros**,
+cuatro veces, sobre el disco mecánico. No terminó nunca. Ahora usa `seek` más
+un byte: **0.32 s**.
+
+Es la segunda vez en dos días que aparece la misma forma del error — la otra
+fue el `min/max` en una sola consulta, que convertía el chequeo de seguridad
+del borrado en un escaneo de dos horas. **Una comprobación que tarda más que la
+operación que vigila no se corre, y una que no se corre no protege de nada.**
+
 ## 2026-09-27 — La red de seguridad estaba matando lo que debía proteger
 
 **Commit:** pendiente.
