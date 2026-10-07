@@ -1227,6 +1227,89 @@ datos es la forma más fácil de engañarse.
 
 ---
 
+## 2026-10-06 (6) — El tablero mostraba 54.7 M señales cuando había 171.3 M
+
+**Esto sí mueve una cifra publicada, y hacia arriba por un factor de tres.**
+
+Apareció preguntando una cosa distinta: cuándo se podía limpiar el disco C.
+
+### Lo que estaba mal
+
+La métrica **Signals** del tablero salía de `data_health.signal_observations`,
+que cuenta la copia que quedó en la base principal cuando las señales se mudaron
+a su propio archivo el **2026-08-25**. Esa copia no recibe una fila desde
+entonces:
+
+| | filas | rango |
+| --- | --- | --- |
+| copia muerta (base principal) | **54,254,669** | 2026-06-06 .. **2026-08-25** |
+| base viva (archivo de señales) | **171,335,775** | 2026-06-06 .. 2026-10-07 |
+
+Mes y medio mostrando un número congelado. **No se veía roto, se veía plano** —
+la misma forma de equivocarse que el 2026-09-12 dejó una gráfica dibujando una
+serie muerta durante 18 días, y por la misma causa.
+
+### Por qué no se arregló contando en vivo
+
+Un `count(*)` sobre 171 millones de filas en cada corrida de la ventana no es
+pagable, y una estimación no sirve para una cifra que se publica.
+
+`conteo_senales_vivas()` usa la misma huella barata que ya existía para la copia
+muerta: `min(rowid)` y `max(rowid)` cuestan **0.001 s** por el índice de rowid, y
+si no cambiaron, el conteo anterior sigue siendo exacto. El número guardado nunca
+es una estimación. El primer conteo se pagó una vez; los siguientes son gratis.
+
+La columna vieja **se conserva** con su significado original —filas en la base
+principal— para que el histórico de `data_health_snapshots` siga siendo
+comparable. La nueva, `signals_live`, es la que el tablero lee.
+
+### Y de paso, los 23 GB
+
+Esa copia muerta ocupa ~23 de los 34.7 GB de la base principal. `archival.py` ya
+decía en su docstring que *"lo que corresponde con ella es borrarla entera, no
+archivarla"*, y el único bloqueador real era que `data_health_snapshot()` la
+contaba: borrarla habría puesto un **0** en pantalla.
+
+Resuelto eso, `borrar-copia-muerta` hace cuatro comprobaciones **en cada
+corrida** y no borra si cualquiera falla:
+
+1. la base de señales existe y se puede leer
+2. su rango de fechas **contiene** al de la copia
+3. la copia sigue congelada —su máximo no pasó del 2026-08-25—
+4. la base viva tiene más filas
+
+Se repiten en cada corrida a propósito: el comando puede ejecutarse semanas
+después, en una ventana, sin nadie mirando, y **una medición de hace semanas no
+autoriza un borrado de 23 GB hoy**.
+
+### El error que casi dejó el chequeo inservible
+
+La primera versión pedía `select min(observed_at), max(observed_at)` en **una**
+consulta. SQLite optimiza `min(x)` o `max(x)` por separado a una búsqueda en el
+índice —`SEARCH`— pero las dos juntas caen a recorrerlo entero —`SCAN`—:
+
+```
+juntas    : SCAN   signal_observations USING COVERING INDEX ...   minutos
+separadas : SEARCH signal_observations USING COVERING INDEX ...   0.003 s
+```
+
+Es el mismo escaneo de 54 millones de filas que el 2026-09-29 se llevó por
+delante el presupuesto de la ventana. **Un chequeo de seguridad que tarda dos
+horas no se corre, y uno que no se corre no protege de nada.** Una prueba fija la
+forma separada, y antes comprueba que el fenómeno se reproduce sobre una base de
+juguete — si no, no estaría comprobando nada.
+
+### Lo que la pregunta original destapó
+
+**El disco C ya estaba limpio.** El proyecto ocupa **0.02 GB** ahí: `data/` es una
+junction a `S:\Draconfly\data`, así que los 34.7 GB que parecen estar en C: viven
+en el SSD. Los 817 GB usados de C: no son Draconfly.
+
+Y `F:\DraconflyData\draconfly_signals.sqlite3` —**54.9 GB**— quedó huérfana:
+ningún `.py`, `.ps1` ni `.cmd` la referencia, `_ruta_senales()` nunca resuelve a
+F:, el respaldo vive aparte en `F:\DraconflyBackups\draconfly_signals\` y **se
+verificó OK el 2026-10-06** (473.7 min, 149 M filas contra 168.1 M en origen).
+
 ## 2026-10-06 (5) — El tablero se parte por plataforma cuando CIERRE la cohorte de YouTube
 
 Decidido hoy, con la condición escrita por adelantado para que no se decida
