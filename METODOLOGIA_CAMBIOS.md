@@ -39,636 +39,9 @@ que hayan alterado lo que el tablero mostraba.
 
 ---
 
-## 2026-08-01 — HIT exige audiencia real, no solo porcentaje
-
-**Commit:** `07059f7`
-
-**Qué encontramos.** Al revisar 105 predicciones ya evaluadas, la probabilidad
-que el modelo emitía estaba **inversamente correlacionada** con el acierto:
-
-| probabilidad emitida | acierto real |
-|---|---|
-| 31.7% (la más baja) | 96.2% |
-| 76.1% (la más alta) | 28.0% |
-
-**Causa.** 63 de esas 105 predicciones eran de creadores con menos de 5 viewers
-promedio. HIT se definía solo como "creció ≥100%", sin exigir a dónde llegó.
-Para un canal de 2 viewers, doblar significa llegar a 4 — trivial y sin valor
-comercial. El modelo estaba ordenando bien; la vara de medición medía otra cosa.
-
-**Cambio A → B.**
-
-- **Antes:** `HIT = crecimiento ≥ 100%`
-- **Después:** `HIT = crecimiento ≥ 100%` **Y** `pico ≥ 100 viewers`
-- Se añadió el resultado `growth_below_audience` para el caso "creció mucho pero
-  nunca alcanzó audiencia útil", en vez de llamarlo *crecimiento leve* (falso) o
-  *acierto* (exagerado).
-
-**Cambio en el pipeline (mismo día, igual de importante).**
-
-- **Antes:** `record-predictions` tomaba los 15 mejores candidatos sin importar
-  su tamaño.
-- **Después:** descarta candidatos con menos de 50 viewers promedio y evalúa un
-  universo mucho más amplio para llenar el lote.
-
-Justificación medida: predicciones sobre creadores por debajo de 50 viewers
-acertaban **4.1%**; las de 50 o más, **48.4%** (con la vara corregida).
-
-**Cómo se modificó el tablero.**
-
-| indicador | antes | después |
-|---|---|---|
-| Precisión de predicción | 58.5% | 16.2% |
-| Índice de confiabilidad | 46.0 ▲ +41.2% | 9.3 ▼ −16.3% |
-| Calibración: prob. alta | 29.6% | 29.6% |
-| Calibración: prob. baja | 57.7% | 5.1% |
-
-Composición del lote diario, antes y después del filtro:
-
-| lote | base mínima | base promedio |
-|---|---|---|
-| 2026-07-31 (sin filtro) | 1.0 viewers | 2.2 |
-| 2026-08-01 (con filtro) | 76.2 viewers | 1,763 |
-
-**Qué transparencia permite.** Que "acierto" signifique una sola cosa
-verificable: *el creador dobló su audiencia y llegó a un tamaño que una marca
-puede patrocinar*. Antes, el número publicado estaba dominado por canales de 1 a
-5 viewers, y las predicciones en las que el sistema decía tener más confianza
-eran justamente las que peor funcionaban — algo que cualquiera que abriera los
-datos habría encontrado.
-
-**Nota sobre la caída.** El 16.2% refleja historial acumulado bajo el criterio
-viejo (predicciones sobre creadores diminutos). Las predicciones emitidas a
-partir de esta fecha usan el filtro nuevo; el acierto histórico del modelo sobre
-creadores de tamaño relevante es **29.0%**, y hacia ahí debería converger el
-número conforme el historial viejo se diluya.
-
----
-
-## 2026-07-27 — Los fallos volvieron a ser visibles
-
-**Commit:** `488a447`
-
-**Qué encontramos.** La sección "Cola de verificación" ordenaba con los aciertos
-primero y mostraba solo 20 filas, con un presupuesto de consulta compartido de
-50. Cuando los aciertos crecieron a 29, **las predicciones fallidas dejaron de
-aparecer en cualquier parte del tablero**, y FAIR/MINOR se mostraban incompletas.
-
-**Cambio A → B.**
-
-- **Antes:** una sola consulta con límite 50, ordenada por acierto primero.
-- **Después:** consulta dedicada (`load_investor_non_hit_evaluated`) con su
-  propio presupuesto, más una sección explícita de *Predicciones fallidas*.
-
-**Cómo se modificó el tablero.** Apareció la sección de fallos (4 predicciones
-MISS que estaban ocultas). FAIR pasó de mostrar 3 de 9 a las 9 completas; MINOR
-de parcial a las 14 completas.
-
-**Qué transparencia permite.** Que el historial muestre los fallos con el mismo
-detalle que los aciertos, por diseño y no por casualidad. Un registro de
-precisión que solo enseña sus éxitos no es un registro de precisión.
-
----
-
-## 2026-07-27 — Breakouts reales dejaron de descartarse como "sin señal"
-
-**Commit:** (incluido en el trabajo de reclasificación de ese día)
-
-**Qué encontramos.** Una predicción se descartaba como `insufficient_baseline`
-("N/D", excluida del cálculo de precisión) si el creador **partía** de menos de 5
-viewers, sin importar a dónde llegara. Eso descartaba casos como pasar de 2 a 36
-viewers (+1,276%), que son exactamente los despegues que el producto busca
-detectar.
-
-**Cambio A → B.**
-
-- **Antes:** se descartaba si `base < 5`.
-- **Después:** se descarta solo si `base < 5` **Y** `pico < 5` — es decir, si
-  ambos extremos siguen siendo ruido.
-
-**Cómo se modificó el tablero.** 13 predicciones pasaron de "N/D" a HIT o FAIR.
-La precisión publicada subió de **29.4% a 44.7%**.
-
-**Advertencia honesta, en retrospectiva.** Este cambio corrigió un error real,
-pero casi todas las predicciones que rescató eran de creadores diminutos, así
-que empujó la muestra hacia ese sesgo y **contribuyó a la calibración invertida
-que se detectó y corrigió el 2026-08-01**. Se documenta aquí porque el registro
-sirve poco si solo anota los aciertos de quien lo escribe.
-
----
-
-## 2026-08-01 — El tablero mostraba datos de hace 4 días
-
-**Commits:** `e1a402f`, `8cd017a`
-
-**Qué encontramos.** Los indicadores del encabezado no leen el ledger
-directamente: leen un caché materializado. Ese caché tenía fecha del
-**2026-07-28**. La tarea horaria sí corría, pero refresca siete cosas en
-secuencia y el índice de atención es la cuarta; las corridas se cortaban antes de
-llegar.
-
-**Causa raíz.** El archivo WAL de SQLite había crecido a **8.1 GB** (contra una
-base de 12.6 GB). SQLite hace *checkpoint* automáticamente, pero sin
-`journal_size_limit` el archivo nunca devuelve el espacio: se queda en su marca
-máxima. Cada conexión nueva tenía que recorrerlo antes de hacer nada, lo que
-volvía lento todo el sistema (una consulta del analizador llegó a tardar 16
-horas).
-
-**Cambio A → B.**
-
-- **Antes:** sin `journal_size_limit`; el WAL solo podía crecer.
-- **Después:** `journal_size_limit = 256 MB` en todas las conexiones, más un
-  *checkpoint* explícito en la tarea diaria de archivado.
-- Se añadió vigilancia del tamaño del WAL al `health-check` (alerta a 500 MB,
-  crítico a 2 GB), porque nada lo estaba observando — esa es la única razón por
-  la que llegó a 8 GB.
-- Se añadió el índice compuesto `(topic, source, observed_at, phrase)` que le
-  faltaba a la consulta del analizador.
-
-**Cómo se modificó el tablero.** Los indicadores volvieron a reflejar el estado
-real. Contar las filas de un tema pasó de agotar 280 s a **0.1–0.4 s**.
-
-**Qué transparencia permite.** Que los números del encabezado correspondan a los
-datos de hoy y no a los de hace cuatro días. Un indicador congelado es peor que
-uno bajo: parece vivo y no lo está.
-
----
-
-## 2026-08-03 — No hubo lote de predicciones: el día se perdió
-
-**Qué pasó.** El lote diario del **3 de agosto de 2026 no existe**. No se
-atrasó ni se registró parcialmente: no se emitió ninguna predicción ese día. El
-historial salta del lote del 2 de agosto (vence el 9) al del 4 de agosto (vence
-el 11).
-
-**Causa inmediata.** La tarea `Draconfly Record Predictions` corrió a las 21:40
-y murió con `sqlite3.OperationalError: database is locked`. Los tres reintentos
-automáticos, separados 15 minutos, murieron igual.
-
-**Causa raíz.** Una corrida de `refresh-market-signals` se quedó colgada
-reteniendo la conexión a SQLite. La tarea tenía `ExecutionTimeLimit = PT72H`
-—el valor por omisión de Windows— así que el sistema tenía permiso de dejar ese
-proceso vivo **tres días**, y con `IgnoreNew` cada disparo horario siguiente
-simplemente devolvía "ya hay una instancia corriendo". El 4 de agosto se observó
-el mismo patrón en vivo: un proceso arrancado a las 04:55 seguía ahí a las 11:20,
-con 145 segundos de CPU acumulados en 6.5 horas —esperando, no trabajando— y
-bloqueando a todo lo demás.
-
-**Corrección a lo que escribimos el 2026-08-01.** En la entrada anterior
-atribuimos el WAL de 8.1 GB únicamente a la falta de `journal_size_limit`. Eso
-era incompleto. Un *checkpoint* de SQLite necesita que ningún otro proceso tenga
-el archivo abierto; un proceso colgado impide el checkpoint por sí solo, sin
-importar cómo esté configurado el límite de tamaño. El WAL gigante y el lote
-perdido no eran dos problemas: eran dos síntomas del mismo proceso colgado.
-`journal_size_limit` era necesario pero no suficiente.
-
-**Por qué no se rellenó.** Se podía generar el lote faltante en cualquier
-momento del 4 de agosto. **No se hizo, deliberadamente.** Una predicción emitida
-con fecha del 3 de agosto pero calculada el 4 se escribe conociendo parte del
-período que dice predecir. Un registro de precisión que admite eso no mide nada.
-El hueco del 3 de agosto es real y se queda, igual que los del 22 al 24 de julio.
-
-**Cambio A → B.**
-
-- **Antes:** `ExecutionTimeLimit` por omisión (72 h) en *Market Signals
-  Refresh*, *Record Predictions* y *Evaluate Predictions*.
-- **Después:** 45 min, 1 h y 2 h respectivamente — siempre por debajo del
-  intervalo de su propio disparador, de modo que una corrida colgada muera antes
-  de que llegue la siguiente.
-- **Antes:** los tres reintentos de `record-predictions` ocurrían la misma
-  noche, con 15 minutos de separación.
-- **Después:** se añadió un segundo disparador a las **05:30**, después de la
-  ventana de mantenimiento de las 04:40. Reintentar en las mismas condiciones
-  congestionadas no iba a funcionar —no funcionó—; reintentar con el WAL recién
-  truncado y sin nadie más escribiendo es un intento genuinamente distinto. El
-  lote llega ~8 horas tarde en vez de nunca.
-- Para que ese segundo disparador no produzca lotes dobles, `record-predictions`
-  aceptó `--min-gap-hours` (20 por omisión) y no registraba nada si el último
-  lote era más reciente que eso. **Este guard se reemplazó al día siguiente;
-  ver la entrada del 2026-08-05.**
-
-**Cómo se modificó el tablero.** "Predicciones en curso" no muestra ningún lote
-emitido el 3 de agosto, y no lo mostrará nunca. El total de predicciones
-evaluables será 15 menor de lo que habría sido.
-
-**Qué transparencia permite.** Que un hueco en el historial sea visible como
-hueco. La alternativa —rellenarlo después— habría dejado el tablero completo y
-el registro sin valor.
-
----
-
-## 2026-08-05 — Se publica la cohorte del sistema actual junto al histórico
-
-**Commit:** `d763a1b`
-
-**Qué encontramos.** El número publicado, 27.3%, no describía un sistema: era
-el promedio de dos que no tienen nada que ver.
-
-| Cohorte | Evaluables | Éxitos | Precisión |
-|---|---|---|---|
-| baseline **< 50** viewers | 61 | 6 | **9.8%** |
-| baseline **≥ 50** viewers | 38 | 21 | **55.3%** |
-
-Las 61 de la primera fila no son predicciones malas. Son predicciones que el
-pipeline **ya no emite** desde el 1 de agosto, cuando `record_decision_predictions()`
-empezó a descartar candidatos por debajo de 50 viewers promedio. Esa parte del
-historial mide un producto retirado.
-
-**Cambio A → B.**
-
-- **Antes:** una sola cifra de precisión, mezclando ambas cohortes.
-- **Después:** dos cifras, ambas visibles y etiquetadas — *Precisión de
-  predicción* (histórico completo) y *Precisión del sistema actual* (solo
-  baseline ≥ 50), cada una con su índice de Wilson.
-
-**Qué NO cambió, y es lo importante.**
-
-- La vara de HIT y FAIR es **idéntica**: ≥100% y ≥50% de crecimiento, ambas
-  exigiendo un pico de al menos 100 viewers.
-- **Ni una sola predicción fallida se excluye.** La cohorte del sistema actual
-  incluye todos sus fracasos; simplemente no incluye predicciones que hoy no se
-  emitirían.
-- **Nada se borra ni se recalifica.** El histórico completo se sigue publicando,
-  al lado y con el mismo tamaño.
-- El número no se calcula desde el caché materializado sino en vivo desde
-  `prediction_ledger`, porque ese caché se quedó congelado dos días (mostraba
-  25.3% cuando el valor real era 27.3%). Una cifra que se presenta como
-  auditable no puede depender de que una tarea horaria haya sobrevivido la
-  noche.
-
-**Cómo se modificó el tablero.** Dos tarjetas nuevas en el encabezado del
-Investor Demo, más una nota al pie que explica la diferencia entre las dos
-cifras y declara cuántas predicciones del sistema actual siguen sin vencer (63
-al momento de escribir esto).
-
-**Qué transparencia permite.** Que se pueda responder "¿qué tan bueno es esto
-*hoy*?" sin esconder de dónde viene. Es la misma distinción que hace un fondo
-al reportar resultados desde un cambio de estrategia: ambas series a la vista.
-Publicar solo el 55.3% sería mover la portería; publicar solo el 27.3% describe
-un pipeline que ya no existe.
-
-**Advertencia registrada por adelantado.** De las 105 predicciones pendientes,
-42 son de la cohorte vieja y vencen primero, entre el 6 y el 8 de agosto. Es
-probable que el histórico **baje antes de subir**. Se deja escrito aquí, antes
-de que ocurra, para que la caída no se pueda presentar después como otra cosa.
-
----
-
-## 2026-08-05 — El lote diario ahora se define por día, no por horas
-
-**Qué pasó.** El 5 de agosto no hubo lote hasta que se forzó a mano. Ninguna
-tarea falló: el Task Scheduler reportó éxito en todas.
-
-```
-Wed 08/05/2026  5:30:02  Sin cambios: ya hay un lote de hace 19.5 h.
-```
-
-**Causa.** El guard puesto el día anterior exigía 20 horas de separación entre
-lotes. El lote del 4 de agosto se escribió a mano a las 10:00 en vez de las
-21:40 habituales, así que a las 05:30 del día 5 tenía 19.5 horas — media hora
-por debajo del umbral. El disparador se abstuvo, correctamente según su propia
-regla, y el siguiente no llegaba hasta las 21:40. **Dos corridas se comportaron
-exactamente como estaban especificadas y el ledger pasó ~36 horas sin lote.**
-
-La regla medía "al menos 20 horas de separación". Lo que se quería era "uno por
-día". No son lo mismo, y la diferencia solo se nota cuando un lote cae fuera de
-horario — que es justo lo que había pasado.
-
-**Cambio A → B.**
-
-- **Antes:** `--min-gap-hours 20`, guard por antigüedad del último lote.
-- **Después:** un lote por **día calendario local**. Un lote fuera de horario ya
-  no empuja al siguiente; simplemente satisface su propio día. `--allow-same-day`
-  lo omite para corridas manuales deliberadas.
-- **Antes:** 21:40 principal, 05:30 respaldo.
-- **Después:** **05:30 principal**, 21:40 respaldo. Las 05:30 caen justo después
-  de la ventana de mantenimiento, con el WAL recién truncado y sin colectores
-  escribiendo — el momento más tranquilo del día para la base, y lo contrario de
-  las condiciones en que murió la corrida del 3 de agosto.
-
-**Día local, no UTC:** "un lote al día" es una promesa hecha a una persona
-mirando un tablero en su propia zona horaria.
-
-**Cómo se modificó el tablero.** El 5 de agosto tiene su lote
-(`2026-08-05T16:00`, vence el 12). El 3 de agosto sigue vacío y así se queda.
-
-**Qué transparencia permite.** Que la regla publicada —"cada día se emite un
-nuevo set de predicciones"— sea la regla que el código realmente aplica. La
-anterior era una aproximación que fallaba exactamente cuando más importaba.
-
----
-
-## 2026-08-06 — Se retira el pronóstico de crecimiento: estaba invertido
-
-**Qué encontramos.** Revisando por qué el "Error medio" del Accuracy Report
-marcaba **205.55%**, apareció algo peor que una métrica mal calculada.
-
-Sobre la cohorte actual (41 predicciones evaluadas, baseline ≥ 50):
-
-| Medición | Valor |
-|---|---|
-| Correlación entre crecimiento pronosticado y real | **r = −0.308** |
-| Aciertos (HIT o FAIR) | 23 |
-| …de esos, con pronóstico **negativo** | **10 (43.5%)** |
-
-`predicted_growth_pct` no es impreciso: está **anticorrelacionado**. En 10 de
-nuestros 23 aciertos, nuestro propio número decía que el creador iba a encoger.
-
-```
-viperriven247   pronosticado -20.3%   real +2202.8%   -> hit_strong
-ltdigilusion    pronosticado  -8.8%   real +1386.5%   -> hit_strong
-```
-
-**Y la métrica además estaba mal calculada:** incluía `insufficient_baseline`
-—los canales diminutos que ya excluimos de la precisión— y usaba `coalesce(...,
-0)` para datos faltantes. Corregida daba **315.9** puntos porcentuales en vez de
-205.6. Más honesta y aún más confusa junto a una precisión del 27%, porque miden
-cosas distintas.
-
-**Qué NO invalida esto.** El registro de aciertos sigue en pie. HIT mide si el
-creador que **seleccionamos** despegó, y eso funciona: 55.3% en la cohorte
-actual. Son dos afirmaciones distintas y solo una está respaldada:
-
-- *"Identificamos creadores que van a despegar"* → **respaldado**
-- *"Pronosticamos cuánto van a crecer"* → **no**, va al revés
-
-**Cambio A → B.**
-
-- **Antes:** el Accuracy Report mostraba "Error medio"; la gráfica de replay
-  dibujaba una línea de "meta pronosticada"; el desglose de "¿por qué?"
-  calculaba su componente de novedad a partir del crecimiento pronosticado.
-- **Después:** las tres cosas fuera. La novedad ahora se deriva de la audiencia
-  base —cuanto más chico el canal, más pesa la novedad frente a su historial—,
-  que es lo que la palabra significa.
-- La gráfica conserva la línea del **baseline**, que es un hecho medido y no un
-  pronóstico.
-
-**Lo que sí se conserva, a propósito.** `predicted_growth_pct` sigue en
-`prediction_ledger` y sigue en la cadena pública `public/ledger_chain.jsonl`.
-Esa cadena es un registro de lo que hicimos, no una superficie comercial:
-borrarle un campo que resultó poco fiable sería exactamente el tipo de gesto que
-la cadena existe para hacer imposible. Queda como constancia de que lo
-calculamos y de que dejamos de sostenerlo.
-
-**Cómo se modificó el tablero.** El Accuracy Report pasa de cinco indicadores a
-cuatro. Desaparece un "205.55%" que un inversionista leería, con razón, como
-*"sus predicciones se equivocan por 200%"*.
-
-**Qué transparencia permite.** Que lo que se publica sea lo que se sostiene. La
-alternativa —dejar el número visible y explicarlo cada vez— era pedirle al
-interlocutor que confiara en una distinción que la pantalla contradecía.
-
----
-
-## 2026-08-06 — El filtro funciona; el ranking todavía no está demostrado
-
-**De dónde salió.** De una pregunta directa: *¿las predicciones se toman al
-azar?* No — cada día se puntúan ~400 candidatos, se descartan los de menos de 50
-espectadores y **se emiten los 15 mejores por puntaje**. Es una selección
-deliberada de la cima. Justamente por eso hay que comprobar si esa cima rinde
-más que el resto.
-
-**Qué encontramos.**
-
-| | Casos | Acierto | IC 95% |
-|---|---|---|---|
-| Universo elegible (cualquier candidato ≥ 50) | 8,456 | **56.3%** | 55.2 – 57.3% |
-| Nuestra selección (los 15 mejores) | 41 | **56.1%** | 41.0 – 70.1% |
-
-Diferencia: **−0.2 puntos porcentuales**. El intervalo de nuestra selección
-**contiene** la tasa base: son estadísticamente indistinguibles.
-
-**Qué significa, separando las dos partes del sistema.**
-
-- **El piso de audiencia SÍ funciona.** Es lo que llevó el acierto de 9.8% a
-  56%. Valor demostrado.
-- **El ranking no ha demostrado nada todavía.** Ordenar por puntaje y tomar los
-  15 mejores rindió igual que tomar 15 cualesquiera del grupo ya filtrado.
-
-**Por qué era esperable.** Las 41 predicciones evaluadas se emitieron **todas
-antes del 6 de agosto**, con el modelo entrenado para "breakout en 6–24 horas".
-Ya habíamos medido que su probabilidad correlacionaba con el acierto real a
-**r = −0.204**. Este resultado lo confirma desde el lado de los resultados: no
-aportaba. El modelo de horizonte de 7 días se activó el 6 de agosto y en
-backtest da 76.8% en el decil superior contra esa base de 56.3%.
-
-**Cambio A → B.**
-
-- **Antes:** el tablero mostraba "Precisión del sistema actual: 56.1%" sin nada
-  contra qué compararla.
-- **Después:** la nota al pie declara la tasa base del universo elegible junto a
-  esa cifra, y dice explícitamente que el aporte del ranking no está probado con
-  predicciones vencidas.
-
-Va pegada a la cifra y no en un panel aparte a propósito: separarlas invita a la
-lectura que los datos no sostienen —*"el modelo acierta 56 de cada 100"*— que le
-da crédito a la parte del sistema que todavía no lo ha ganado.
-
-**Qué transparencia permite.** Que la pregunta *"¿su modelo le gana al azar?"*
-tenga una respuesta preparada y verificable: *el filtro sí, el ranking aún no
-está demostrado, y el primer veredicto llega el 13 de agosto*. Es una afirmación
-más débil que un 56.1% a secas, y es la que se sostiene.
-
----
-
-## 2026-08-27 — Se aplica la vara nueva, y una columna se queda atrás
-
-**Commits:** `be1409b` (se aplica la vara), `3f46ee5` (la tasa base llega a la
-pantalla), `39dc1a0` (HIT estricto y reparación de las etiquetas)
-
-Este es el cambio que ejecuta el compromiso registrado el 2026-08-26. Se aplica
-a todo el histórico: 197 filas del ledger reclasificadas, 600 entran y 600
-salen. Ninguna predicción se borra ni se rehace —reclasificar es aritmética
-sobre el pico y el crecimiento ya observados— y el cambio queda declarado en la
-cadena pública como dos eventos `rule_change`, sin reescribir una sola línea
-existente.
-
-**Lo que cambió en pantalla.**
-
-| cifra publicada | vara vieja | vara nueva |
-|---|---|---|
-| precisión del sistema actual (n=341) | 48.8% | **12.6%** |
-| en la ventana comparable (n=297) | 51.9% | **13.8%** |
-| tasa base pareada | 50.3% | **8.1%** |
-| lift | +1.6 pp (−4.1 a +7.3) | **+5.7 pp** (+2.2 a +10.1) |
-| veredicto | no concluyente | **supera** |
-
-El titular se ve cuatro veces peor y es defendible por primera vez. El anterior
-se veía bien y no lo era.
-
-**Dos cifras que nunca habían llegado a la pantalla.** La tarjeta de tasa base y
-la de lift se escribieron el 2026-08-19 en respuesta a una crítica que pedía
-exactamente eso, y no se dibujaron ni una vez: la línea que fusiona el caché con
-el resumen del ledger copiaba una lista de claves escrita a mano, y
-`matched_base_rate_pct` y `lift_pp` no estaban en ella. Se calculaban en cada
-carga y se descartaban una línea después. En pantalla eso no se ve como un
-error, se ve como una ausencia, y por eso sobrevivió ocho días. Se encontró
-porque un analista miró el tablero y preguntó cuál era la tasa base.
-
-### El hallazgo de las etiquetas
-
-**Qué pasó.** Al reclasificar `twitch_horizon_labels` el 2026-08-27 solo se
-escribieron las filas donde cambiaba la **bandera de éxito**. Para 860 anclas no
-cambiaba: eran acierto bajo la vara vieja (crecer +100%) y siguen siéndolo bajo
-la nueva, solo que ahora como FAIR en vez de HIT. Esas filas no se tocaron, y su
-columna `outcome` se quedó diciendo `hit_strong`. En total **1,090 filas con el
-resultado desfasado** de 22,135.
-
-**Qué NO afectó.** La tasa base publicada se calcula con `sum(success)`. Al
-recalcular las 22,135 filas desde cero, **0 tenían la bandera de éxito
-incorrecta**. El 8.1% se sostiene, y el lift publicado el 26 y el 27 no estaba
-inflado. Esto se verifica, no se supone: el conteo de discrepancias en `success`
-es parte de la salida del script de reparación.
-
-**Qué sí habría afectado.** La tasa base del HIT estricto se calcula con
-`outcome = 'hit_strong'`. Sin reparar habría devuelto 1,936 donde la respuesta
-es 1,076:
-
-| | sin reparar | reparado |
-|---|---|---|
-| `hit_strong` | 1,936 | 1,076 |
-| `fair` | 0 | 860 |
-| tasa base solo HIT | 8.7% | **4.9%** |
-
-Con 8.7% de base, nuestro 9.1% habría parecido *apenas mejor que el azar*. Con
-la cifra correcta es **el doble**. La diferencia entre esas dos lecturas es toda
-la afirmación, y se habría publicado como hecho.
-
-**Por qué se encontró.** No por la auditoría, que revisa el ledger y no las
-etiquetas. Se encontró porque se pidió publicar el HIT estricto, y esa cifra
-depende de la columna rota: al ir a calcularla apareció un cero imposible —cero
-FAIR en 22,135 anclas cuando el ledger tenía 14— que no cuadraba con nada. La
-lección no es "revisar mejor": es que **una escritura condicionada a que cambie
-el campo A deja el campo B atrás**, y que los ceros imposibles hay que
-perseguirlos aunque el número que se estaba calculando salga bonito.
-
-La reparación recalcula `outcome` de **todas** las filas, no solo de las que
-cambian de éxito. Tarda 1.0 s.
-
-**Lo que se publica ahora.** El HIT estricto —el megaéxito— con su propia tasa
-base, contada con la misma definición en los dos lados. Sumar HIT+FAIR de un
-lado y solo HIT del otro daría un lift inflado que nada en la pantalla podría
-desmentir:
-
-| | Draconfly | azar | ratio | IC del lift |
-|---|---|---|---|---|
-| HIT + FAIR | 13.8% | 8.1% | 1.71× | +2.2 a +10.1 |
-| **solo HIT** | **9.1%** | **4.3%** | **2.09×** | **+2.0 a +8.6** |
-
-Cuanto más dura la vara, mejor se ve la selección contra el azar. Es la forma
-que debería tener si el sistema discrimina de verdad, y la contraria a la que
-produciría un sistema optimizando su propia métrica.
-
-**Qué se puede afirmar después de esto.** Lo mismo que el 26: nada todavía. Las
-cifras de arriba son retrospectivas y la vara se fijó después de ver estos
-datos. Lo que va a contar sigue siendo lo que den las predicciones emitidas
-desde el 2026-08-26.
-
----
-
-## 2026-10-01 — La lectura pre-registrada: supera
-
-**Commit de la cadena:** `3100460`, publicado el 2026-10-01 a las 10:59:09 -0500.
-
-**Hash final de la cadena el día de la lectura:**
-
-```
-3961c149b642e6c5f1d2d130dae872f1b5029c5b461b28877d552a48c1070732
-```
-
-2,147 eslabones · 1,125 emisiones · 1,020 resultados · 0 eslabones rotos.
-
-Ese hash fija el estado exacto del archivo público en el momento de leer. Quien
-clone el repositorio y recalcule la cadena debe obtener ese mismo valor; si no lo
-obtiene, el archivo fue alterado después y nada de lo que sigue se sostiene.
-
-**Se cumplió la condición declarada el 2026-09-05**: 450 predicciones vencidas,
-antes del 2026-10-08. La cohorte va del 2026-08-26 al 2026-09-24 y cubre 261
-creadores distintos.
-
-### Las dos cifras
-
-Como se comprometió el 2026-09-16, se publican las dos. La tasa base es 9.8%,
-medida sobre 46,394 anclas etiquetadas con la misma vara y el mismo día.
-
-| unidad | aciertos | tasa | lift | IC del lift |
-|---|---|---|---|---|
-| **por predicción** (la pre-registrada) | 120/450 | **26.7%** | **+16.9 pp** | (+13.0, +21.1) |
-| **por despegue distinto** | 104/450 | **23.1%** | **+13.3 pp** | (+9.6, +17.4) |
-
-Solo HIT, el caso extremo: **73/450 = 16.2%**.
-
-**La unidad que cuenta es la predicción**, porque es la que se pre-registró. La
-segunda cifra se publica porque sin ella la primera está unos 3.6 puntos arriba
-de lo que sostiene un conteo por evento: 16 de los 120 aciertos son el mismo
-despegue visto por dos predicciones con ventanas solapadas. Los casos, por
-tamaño de pico: `haitani0904` (3→2), `eslcs` (4→2), `lacyoffline_` (5→4),
-`ssaab` (2→1), `singollo` (5→2), `franciscoow` (2→1), `kusaka6e` (2→1),
-`assiikun` (2→1), `viperriven247` (7→3), `allinyonok` (2→1).
-
-### El intervalo es una cota optimista, y cuánto
-
-También se comprometió decirlo. El IC de Wilson supone 450 ensayos
-independientes y no lo son: 261 creadores en 450 predicciones. Un bootstrap por
-conglomerados —remuestreando creadores enteros, 20,000 muestras, semilla
-20261001— da el intervalo que aguanta esa correlación:
-
-| intervalo del lift (por predicción) | piso | ancho |
-|---|---|---|
-| Wilson, supone independencia — **cota optimista** | +13.0 pp | 8.1 pp |
-| bootstrap por conglomerados — **el honesto** | **+12.0 pp** | 9.8 pp |
-
-**El piso defendible del lift es +12.0 puntos.** Ningún intervalo de los cuatro
-publicados aquí se acerca al cero.
-
-### Qué se auditó antes de leer
-
-Un número favorable merece más auditoría que uno malo. Lo verificado el mismo
-día, contra el repositorio y contra el archivo público:
-
-- **La vara no se movió.** HIT +400%/250 y FAIR +250%/250 quedaron fijados en
-  `be1409b` el 2026-08-27 y no cambiaron en los 35 días de la cohorte.
-- **El modelo no se reentrenó.** `models/horizon_model.joblib` es del 2026-08-05
-  a las 23:38, anterior al inicio de la cohorte.
-- **La selección no cambió.** Dos commits tocaron ese camino desde el 08-26 y
-  ninguno modificó una regla de clasificación.
-- **Ninguna de las 450 se publicó después de vencer.** Margen mínimo 5.99 días,
-  mediana 6.99.
-- **Ningún resultado se anotó antes que su predicción.**
-- **La auditoría de invariantes pasó 11 de 11**, incluida
-  `ledger_reclasificado`: recalcular la vara vigente sobre todo el histórico
-  devuelve exactamente lo guardado.
-
-**Un defecto encontrado y corregido el mismo día.** A las 06:10:02 se evaluaron
-los últimos 15 y la tarea de publicación corrió a las 06:10:10 — ocho segundos
-después, pero leyó la base antes de que la escritura se confirmara. Durante cinco
-horas la cadena pública sostuvo 105/435 mientras el tablero mostraba 120/450. Se
-publicó a mano a las 10:59 y se verificó que el archivo público reconstruye el
-26.7% por sí solo. Vale registrarlo porque es exactamente el tipo de hueco que
-invalida una prueba sin que nadie lo note: la cifra era correcta y la evidencia
-todavía no.
-
-### Qué se puede afirmar después de esto
-
-Que sobre 450 predicciones emitidas con siete días de anticipación y publicadas
-antes de conocer su resultado, la selección acertó **2.7 veces más que tomar un
-candidato elegible al azar**, y que el piso estadístico de esa ventaja —
-descontando que algunos creadores se repiten — es **+12 puntos porcentuales**.
-
-Qué **no** se puede afirmar: nada fuera de Twitch, nada sobre categorías que
-nunca entran al top 10, y nada sobre los lotes emitidos después del 2026-09-24,
-que son una cohorte nueva y todavía no vencen.
-
-**Para el próximo pre-registro**, lo que este dejó claro: la unidad debería ser
-el despegue y no la predicción, o imponerse un enfriamiento por creador. Mantener
-la unidad declarada fue lo correcto —cambiarla con el resultado a la vista sería
-mover la portería— pero obligó a publicar dos cifras donde una habría bastado.
-
----
-
 ## 2026-10-06 (4) — Arreglar una de seis y darlo por cerrado
 
-Ampliación de la entrada anterior, escrita porque el error de método importa
+Ampliación de *2026-10-06 (3)*, escrita porque el error de método importa
 más que el arreglo: **corté una consulta, verifiqué que el reporte matutino
 quedara bien, y di el problema por resuelto.** El tablero seguía mostrando
 cuatro cifras sin tope.
@@ -1101,6 +474,106 @@ contra el código viejo, no leyéndola.
 
 ---
 
+## 2026-10-01 — La lectura pre-registrada: supera
+
+**Commit de la cadena:** `3100460`, publicado el 2026-10-01 a las 10:59:09 -0500.
+
+**Hash final de la cadena el día de la lectura:**
+
+```
+3961c149b642e6c5f1d2d130dae872f1b5029c5b461b28877d552a48c1070732
+```
+
+2,147 eslabones · 1,125 emisiones · 1,020 resultados · 0 eslabones rotos.
+
+Ese hash fija el estado exacto del archivo público en el momento de leer. Quien
+clone el repositorio y recalcule la cadena debe obtener ese mismo valor; si no lo
+obtiene, el archivo fue alterado después y nada de lo que sigue se sostiene.
+
+**Se cumplió la condición declarada el 2026-09-05**: 450 predicciones vencidas,
+antes del 2026-10-08. La cohorte va del 2026-08-26 al 2026-09-24 y cubre 261
+creadores distintos.
+
+### Las dos cifras
+
+Como se comprometió el 2026-09-16, se publican las dos. La tasa base es 9.8%,
+medida sobre 46,394 anclas etiquetadas con la misma vara y el mismo día.
+
+| unidad | aciertos | tasa | lift | IC del lift |
+|---|---|---|---|---|
+| **por predicción** (la pre-registrada) | 120/450 | **26.7%** | **+16.9 pp** | (+13.0, +21.1) |
+| **por despegue distinto** | 104/450 | **23.1%** | **+13.3 pp** | (+9.6, +17.4) |
+
+Solo HIT, el caso extremo: **73/450 = 16.2%**.
+
+**La unidad que cuenta es la predicción**, porque es la que se pre-registró. La
+segunda cifra se publica porque sin ella la primera está unos 3.6 puntos arriba
+de lo que sostiene un conteo por evento: 16 de los 120 aciertos son el mismo
+despegue visto por dos predicciones con ventanas solapadas. Los casos, por
+tamaño de pico: `haitani0904` (3→2), `eslcs` (4→2), `lacyoffline_` (5→4),
+`ssaab` (2→1), `singollo` (5→2), `franciscoow` (2→1), `kusaka6e` (2→1),
+`assiikun` (2→1), `viperriven247` (7→3), `allinyonok` (2→1).
+
+### El intervalo es una cota optimista, y cuánto
+
+También se comprometió decirlo. El IC de Wilson supone 450 ensayos
+independientes y no lo son: 261 creadores en 450 predicciones. Un bootstrap por
+conglomerados —remuestreando creadores enteros, 20,000 muestras, semilla
+20261001— da el intervalo que aguanta esa correlación:
+
+| intervalo del lift (por predicción) | piso | ancho |
+|---|---|---|
+| Wilson, supone independencia — **cota optimista** | +13.0 pp | 8.1 pp |
+| bootstrap por conglomerados — **el honesto** | **+12.0 pp** | 9.8 pp |
+
+**El piso defendible del lift es +12.0 puntos.** Ningún intervalo de los cuatro
+publicados aquí se acerca al cero.
+
+### Qué se auditó antes de leer
+
+Un número favorable merece más auditoría que uno malo. Lo verificado el mismo
+día, contra el repositorio y contra el archivo público:
+
+- **La vara no se movió.** HIT +400%/250 y FAIR +250%/250 quedaron fijados en
+  `be1409b` el 2026-08-27 y no cambiaron en los 35 días de la cohorte.
+- **El modelo no se reentrenó.** `models/horizon_model.joblib` es del 2026-08-05
+  a las 23:38, anterior al inicio de la cohorte.
+- **La selección no cambió.** Dos commits tocaron ese camino desde el 08-26 y
+  ninguno modificó una regla de clasificación.
+- **Ninguna de las 450 se publicó después de vencer.** Margen mínimo 5.99 días,
+  mediana 6.99.
+- **Ningún resultado se anotó antes que su predicción.**
+- **La auditoría de invariantes pasó 11 de 11**, incluida
+  `ledger_reclasificado`: recalcular la vara vigente sobre todo el histórico
+  devuelve exactamente lo guardado.
+
+**Un defecto encontrado y corregido el mismo día.** A las 06:10:02 se evaluaron
+los últimos 15 y la tarea de publicación corrió a las 06:10:10 — ocho segundos
+después, pero leyó la base antes de que la escritura se confirmara. Durante cinco
+horas la cadena pública sostuvo 105/435 mientras el tablero mostraba 120/450. Se
+publicó a mano a las 10:59 y se verificó que el archivo público reconstruye el
+26.7% por sí solo. Vale registrarlo porque es exactamente el tipo de hueco que
+invalida una prueba sin que nadie lo note: la cifra era correcta y la evidencia
+todavía no.
+
+### Qué se puede afirmar después de esto
+
+Que sobre 450 predicciones emitidas con siete días de anticipación y publicadas
+antes de conocer su resultado, la selección acertó **2.7 veces más que tomar un
+candidato elegible al azar**, y que el piso estadístico de esa ventaja —
+descontando que algunos creadores se repiten — es **+12 puntos porcentuales**.
+
+Qué **no** se puede afirmar: nada fuera de Twitch, nada sobre categorías que
+nunca entran al top 10, y nada sobre los lotes emitidos después del 2026-09-24,
+que son una cohorte nueva y todavía no vencen.
+
+**Para el próximo pre-registro**, lo que este dejó claro: la unidad debería ser
+el despegue y no la predicción, o imponerse un enfriamiento por creador. Mantener
+la unidad declarada fue lo correcto —cambiarla con el resultado a la vista sería
+mover la portería— pero obligó a publicar dos cifras donde una habría bastado.
+
+---
+
 ## 2026-09-25 — La ventana de medición era 2.8 h más corta de lo declarado
 
 **Commit:** pendiente. **Se declara seis días antes de la lectura**, con el
@@ -1218,6 +691,533 @@ hallazgo no adelanta nada ni justifica leer antes.
 
 ---
 
+## 2026-08-27 — Se aplica la vara nueva, y una columna se queda atrás
+
+**Commits:** `be1409b` (se aplica la vara), `3f46ee5` (la tasa base llega a la
+pantalla), `39dc1a0` (HIT estricto y reparación de las etiquetas)
+
+Este es el cambio que ejecuta el compromiso registrado el 2026-08-26. Se aplica
+a todo el histórico: 197 filas del ledger reclasificadas, 600 entran y 600
+salen. Ninguna predicción se borra ni se rehace —reclasificar es aritmética
+sobre el pico y el crecimiento ya observados— y el cambio queda declarado en la
+cadena pública como dos eventos `rule_change`, sin reescribir una sola línea
+existente.
+
+**Lo que cambió en pantalla.**
+
+| cifra publicada | vara vieja | vara nueva |
+|---|---|---|
+| precisión del sistema actual (n=341) | 48.8% | **12.6%** |
+| en la ventana comparable (n=297) | 51.9% | **13.8%** |
+| tasa base pareada | 50.3% | **8.1%** |
+| lift | +1.6 pp (−4.1 a +7.3) | **+5.7 pp** (+2.2 a +10.1) |
+| veredicto | no concluyente | **supera** |
+
+El titular se ve cuatro veces peor y es defendible por primera vez. El anterior
+se veía bien y no lo era.
+
+**Dos cifras que nunca habían llegado a la pantalla.** La tarjeta de tasa base y
+la de lift se escribieron el 2026-08-19 en respuesta a una crítica que pedía
+exactamente eso, y no se dibujaron ni una vez: la línea que fusiona el caché con
+el resumen del ledger copiaba una lista de claves escrita a mano, y
+`matched_base_rate_pct` y `lift_pp` no estaban en ella. Se calculaban en cada
+carga y se descartaban una línea después. En pantalla eso no se ve como un
+error, se ve como una ausencia, y por eso sobrevivió ocho días. Se encontró
+porque un analista miró el tablero y preguntó cuál era la tasa base.
+
+### El hallazgo de las etiquetas
+
+**Qué pasó.** Al reclasificar `twitch_horizon_labels` el 2026-08-27 solo se
+escribieron las filas donde cambiaba la **bandera de éxito**. Para 860 anclas no
+cambiaba: eran acierto bajo la vara vieja (crecer +100%) y siguen siéndolo bajo
+la nueva, solo que ahora como FAIR en vez de HIT. Esas filas no se tocaron, y su
+columna `outcome` se quedó diciendo `hit_strong`. En total **1,090 filas con el
+resultado desfasado** de 22,135.
+
+**Qué NO afectó.** La tasa base publicada se calcula con `sum(success)`. Al
+recalcular las 22,135 filas desde cero, **0 tenían la bandera de éxito
+incorrecta**. El 8.1% se sostiene, y el lift publicado el 26 y el 27 no estaba
+inflado. Esto se verifica, no se supone: el conteo de discrepancias en `success`
+es parte de la salida del script de reparación.
+
+**Qué sí habría afectado.** La tasa base del HIT estricto se calcula con
+`outcome = 'hit_strong'`. Sin reparar habría devuelto 1,936 donde la respuesta
+es 1,076:
+
+| | sin reparar | reparado |
+|---|---|---|
+| `hit_strong` | 1,936 | 1,076 |
+| `fair` | 0 | 860 |
+| tasa base solo HIT | 8.7% | **4.9%** |
+
+Con 8.7% de base, nuestro 9.1% habría parecido *apenas mejor que el azar*. Con
+la cifra correcta es **el doble**. La diferencia entre esas dos lecturas es toda
+la afirmación, y se habría publicado como hecho.
+
+**Por qué se encontró.** No por la auditoría, que revisa el ledger y no las
+etiquetas. Se encontró porque se pidió publicar el HIT estricto, y esa cifra
+depende de la columna rota: al ir a calcularla apareció un cero imposible —cero
+FAIR en 22,135 anclas cuando el ledger tenía 14— que no cuadraba con nada. La
+lección no es "revisar mejor": es que **una escritura condicionada a que cambie
+el campo A deja el campo B atrás**, y que los ceros imposibles hay que
+perseguirlos aunque el número que se estaba calculando salga bonito.
+
+La reparación recalcula `outcome` de **todas** las filas, no solo de las que
+cambian de éxito. Tarda 1.0 s.
+
+**Lo que se publica ahora.** El HIT estricto —el megaéxito— con su propia tasa
+base, contada con la misma definición en los dos lados. Sumar HIT+FAIR de un
+lado y solo HIT del otro daría un lift inflado que nada en la pantalla podría
+desmentir:
+
+| | Draconfly | azar | ratio | IC del lift |
+|---|---|---|---|---|
+| HIT + FAIR | 13.8% | 8.1% | 1.71× | +2.2 a +10.1 |
+| **solo HIT** | **9.1%** | **4.3%** | **2.09×** | **+2.0 a +8.6** |
+
+Cuanto más dura la vara, mejor se ve la selección contra el azar. Es la forma
+que debería tener si el sistema discrimina de verdad, y la contraria a la que
+produciría un sistema optimizando su propia métrica.
+
+**Qué se puede afirmar después de esto.** Lo mismo que el 26: nada todavía. Las
+cifras de arriba son retrospectivas y la vara se fijó después de ver estos
+datos. Lo que va a contar sigue siendo lo que den las predicciones emitidas
+desde el 2026-08-26.
+
+---
+
+## 2026-08-06 — Se retira el pronóstico de crecimiento: estaba invertido
+
+**Qué encontramos.** Revisando por qué el "Error medio" del Accuracy Report
+marcaba **205.55%**, apareció algo peor que una métrica mal calculada.
+
+Sobre la cohorte actual (41 predicciones evaluadas, baseline ≥ 50):
+
+| Medición | Valor |
+|---|---|
+| Correlación entre crecimiento pronosticado y real | **r = −0.308** |
+| Aciertos (HIT o FAIR) | 23 |
+| …de esos, con pronóstico **negativo** | **10 (43.5%)** |
+
+`predicted_growth_pct` no es impreciso: está **anticorrelacionado**. En 10 de
+nuestros 23 aciertos, nuestro propio número decía que el creador iba a encoger.
+
+```
+viperriven247   pronosticado -20.3%   real +2202.8%   -> hit_strong
+ltdigilusion    pronosticado  -8.8%   real +1386.5%   -> hit_strong
+```
+
+**Y la métrica además estaba mal calculada:** incluía `insufficient_baseline`
+—los canales diminutos que ya excluimos de la precisión— y usaba `coalesce(...,
+0)` para datos faltantes. Corregida daba **315.9** puntos porcentuales en vez de
+205.6. Más honesta y aún más confusa junto a una precisión del 27%, porque miden
+cosas distintas.
+
+**Qué NO invalida esto.** El registro de aciertos sigue en pie. HIT mide si el
+creador que **seleccionamos** despegó, y eso funciona: 55.3% en la cohorte
+actual. Son dos afirmaciones distintas y solo una está respaldada:
+
+- *"Identificamos creadores que van a despegar"* → **respaldado**
+- *"Pronosticamos cuánto van a crecer"* → **no**, va al revés
+
+**Cambio A → B.**
+
+- **Antes:** el Accuracy Report mostraba "Error medio"; la gráfica de replay
+  dibujaba una línea de "meta pronosticada"; el desglose de "¿por qué?"
+  calculaba su componente de novedad a partir del crecimiento pronosticado.
+- **Después:** las tres cosas fuera. La novedad ahora se deriva de la audiencia
+  base —cuanto más chico el canal, más pesa la novedad frente a su historial—,
+  que es lo que la palabra significa.
+- La gráfica conserva la línea del **baseline**, que es un hecho medido y no un
+  pronóstico.
+
+**Lo que sí se conserva, a propósito.** `predicted_growth_pct` sigue en
+`prediction_ledger` y sigue en la cadena pública `public/ledger_chain.jsonl`.
+Esa cadena es un registro de lo que hicimos, no una superficie comercial:
+borrarle un campo que resultó poco fiable sería exactamente el tipo de gesto que
+la cadena existe para hacer imposible. Queda como constancia de que lo
+calculamos y de que dejamos de sostenerlo.
+
+**Cómo se modificó el tablero.** El Accuracy Report pasa de cinco indicadores a
+cuatro. Desaparece un "205.55%" que un inversionista leería, con razón, como
+*"sus predicciones se equivocan por 200%"*.
+
+**Qué transparencia permite.** Que lo que se publica sea lo que se sostiene. La
+alternativa —dejar el número visible y explicarlo cada vez— era pedirle al
+interlocutor que confiara en una distinción que la pantalla contradecía.
+
+---
+
+## 2026-08-06 — El filtro funciona; el ranking todavía no está demostrado
+
+**De dónde salió.** De una pregunta directa: *¿las predicciones se toman al
+azar?* No — cada día se puntúan ~400 candidatos, se descartan los de menos de 50
+espectadores y **se emiten los 15 mejores por puntaje**. Es una selección
+deliberada de la cima. Justamente por eso hay que comprobar si esa cima rinde
+más que el resto.
+
+**Qué encontramos.**
+
+| | Casos | Acierto | IC 95% |
+|---|---|---|---|
+| Universo elegible (cualquier candidato ≥ 50) | 8,456 | **56.3%** | 55.2 – 57.3% |
+| Nuestra selección (los 15 mejores) | 41 | **56.1%** | 41.0 – 70.1% |
+
+Diferencia: **−0.2 puntos porcentuales**. El intervalo de nuestra selección
+**contiene** la tasa base: son estadísticamente indistinguibles.
+
+**Qué significa, separando las dos partes del sistema.**
+
+- **El piso de audiencia SÍ funciona.** Es lo que llevó el acierto de 9.8% a
+  56%. Valor demostrado.
+- **El ranking no ha demostrado nada todavía.** Ordenar por puntaje y tomar los
+  15 mejores rindió igual que tomar 15 cualesquiera del grupo ya filtrado.
+
+**Por qué era esperable.** Las 41 predicciones evaluadas se emitieron **todas
+antes del 6 de agosto**, con el modelo entrenado para "breakout en 6–24 horas".
+Ya habíamos medido que su probabilidad correlacionaba con el acierto real a
+**r = −0.204**. Este resultado lo confirma desde el lado de los resultados: no
+aportaba. El modelo de horizonte de 7 días se activó el 6 de agosto y en
+backtest da 76.8% en el decil superior contra esa base de 56.3%.
+
+**Cambio A → B.**
+
+- **Antes:** el tablero mostraba "Precisión del sistema actual: 56.1%" sin nada
+  contra qué compararla.
+- **Después:** la nota al pie declara la tasa base del universo elegible junto a
+  esa cifra, y dice explícitamente que el aporte del ranking no está probado con
+  predicciones vencidas.
+
+Va pegada a la cifra y no en un panel aparte a propósito: separarlas invita a la
+lectura que los datos no sostienen —*"el modelo acierta 56 de cada 100"*— que le
+da crédito a la parte del sistema que todavía no lo ha ganado.
+
+**Qué transparencia permite.** Que la pregunta *"¿su modelo le gana al azar?"*
+tenga una respuesta preparada y verificable: *el filtro sí, el ranking aún no
+está demostrado, y el primer veredicto llega el 13 de agosto*. Es una afirmación
+más débil que un 56.1% a secas, y es la que se sostiene.
+
+---
+
+## 2026-08-05 — Se publica la cohorte del sistema actual junto al histórico
+
+**Commit:** `d763a1b`
+
+**Qué encontramos.** El número publicado, 27.3%, no describía un sistema: era
+el promedio de dos que no tienen nada que ver.
+
+| Cohorte | Evaluables | Éxitos | Precisión |
+|---|---|---|---|
+| baseline **< 50** viewers | 61 | 6 | **9.8%** |
+| baseline **≥ 50** viewers | 38 | 21 | **55.3%** |
+
+Las 61 de la primera fila no son predicciones malas. Son predicciones que el
+pipeline **ya no emite** desde el 1 de agosto, cuando `record_decision_predictions()`
+empezó a descartar candidatos por debajo de 50 viewers promedio. Esa parte del
+historial mide un producto retirado.
+
+**Cambio A → B.**
+
+- **Antes:** una sola cifra de precisión, mezclando ambas cohortes.
+- **Después:** dos cifras, ambas visibles y etiquetadas — *Precisión de
+  predicción* (histórico completo) y *Precisión del sistema actual* (solo
+  baseline ≥ 50), cada una con su índice de Wilson.
+
+**Qué NO cambió, y es lo importante.**
+
+- La vara de HIT y FAIR es **idéntica**: ≥100% y ≥50% de crecimiento, ambas
+  exigiendo un pico de al menos 100 viewers.
+- **Ni una sola predicción fallida se excluye.** La cohorte del sistema actual
+  incluye todos sus fracasos; simplemente no incluye predicciones que hoy no se
+  emitirían.
+- **Nada se borra ni se recalifica.** El histórico completo se sigue publicando,
+  al lado y con el mismo tamaño.
+- El número no se calcula desde el caché materializado sino en vivo desde
+  `prediction_ledger`, porque ese caché se quedó congelado dos días (mostraba
+  25.3% cuando el valor real era 27.3%). Una cifra que se presenta como
+  auditable no puede depender de que una tarea horaria haya sobrevivido la
+  noche.
+
+**Cómo se modificó el tablero.** Dos tarjetas nuevas en el encabezado del
+Investor Demo, más una nota al pie que explica la diferencia entre las dos
+cifras y declara cuántas predicciones del sistema actual siguen sin vencer (63
+al momento de escribir esto).
+
+**Qué transparencia permite.** Que se pueda responder "¿qué tan bueno es esto
+*hoy*?" sin esconder de dónde viene. Es la misma distinción que hace un fondo
+al reportar resultados desde un cambio de estrategia: ambas series a la vista.
+Publicar solo el 55.3% sería mover la portería; publicar solo el 27.3% describe
+un pipeline que ya no existe.
+
+**Advertencia registrada por adelantado.** De las 105 predicciones pendientes,
+42 son de la cohorte vieja y vencen primero, entre el 6 y el 8 de agosto. Es
+probable que el histórico **baje antes de subir**. Se deja escrito aquí, antes
+de que ocurra, para que la caída no se pueda presentar después como otra cosa.
+
+---
+
+## 2026-08-05 — El lote diario ahora se define por día, no por horas
+
+**Qué pasó.** El 5 de agosto no hubo lote hasta que se forzó a mano. Ninguna
+tarea falló: el Task Scheduler reportó éxito en todas.
+
+```
+Wed 08/05/2026  5:30:02  Sin cambios: ya hay un lote de hace 19.5 h.
+```
+
+**Causa.** El guard puesto el día anterior exigía 20 horas de separación entre
+lotes. El lote del 4 de agosto se escribió a mano a las 10:00 en vez de las
+21:40 habituales, así que a las 05:30 del día 5 tenía 19.5 horas — media hora
+por debajo del umbral. El disparador se abstuvo, correctamente según su propia
+regla, y el siguiente no llegaba hasta las 21:40. **Dos corridas se comportaron
+exactamente como estaban especificadas y el ledger pasó ~36 horas sin lote.**
+
+La regla medía "al menos 20 horas de separación". Lo que se quería era "uno por
+día". No son lo mismo, y la diferencia solo se nota cuando un lote cae fuera de
+horario — que es justo lo que había pasado.
+
+**Cambio A → B.**
+
+- **Antes:** `--min-gap-hours 20`, guard por antigüedad del último lote.
+- **Después:** un lote por **día calendario local**. Un lote fuera de horario ya
+  no empuja al siguiente; simplemente satisface su propio día. `--allow-same-day`
+  lo omite para corridas manuales deliberadas.
+- **Antes:** 21:40 principal, 05:30 respaldo.
+- **Después:** **05:30 principal**, 21:40 respaldo. Las 05:30 caen justo después
+  de la ventana de mantenimiento, con el WAL recién truncado y sin colectores
+  escribiendo — el momento más tranquilo del día para la base, y lo contrario de
+  las condiciones en que murió la corrida del 3 de agosto.
+
+**Día local, no UTC:** "un lote al día" es una promesa hecha a una persona
+mirando un tablero en su propia zona horaria.
+
+**Cómo se modificó el tablero.** El 5 de agosto tiene su lote
+(`2026-08-05T16:00`, vence el 12). El 3 de agosto sigue vacío y así se queda.
+
+**Qué transparencia permite.** Que la regla publicada —"cada día se emite un
+nuevo set de predicciones"— sea la regla que el código realmente aplica. La
+anterior era una aproximación que fallaba exactamente cuando más importaba.
+
+---
+
+## 2026-08-03 — No hubo lote de predicciones: el día se perdió
+
+**Qué pasó.** El lote diario del **3 de agosto de 2026 no existe**. No se
+atrasó ni se registró parcialmente: no se emitió ninguna predicción ese día. El
+historial salta del lote del 2 de agosto (vence el 9) al del 4 de agosto (vence
+el 11).
+
+**Causa inmediata.** La tarea `Draconfly Record Predictions` corrió a las 21:40
+y murió con `sqlite3.OperationalError: database is locked`. Los tres reintentos
+automáticos, separados 15 minutos, murieron igual.
+
+**Causa raíz.** Una corrida de `refresh-market-signals` se quedó colgada
+reteniendo la conexión a SQLite. La tarea tenía `ExecutionTimeLimit = PT72H`
+—el valor por omisión de Windows— así que el sistema tenía permiso de dejar ese
+proceso vivo **tres días**, y con `IgnoreNew` cada disparo horario siguiente
+simplemente devolvía "ya hay una instancia corriendo". El 4 de agosto se observó
+el mismo patrón en vivo: un proceso arrancado a las 04:55 seguía ahí a las 11:20,
+con 145 segundos de CPU acumulados en 6.5 horas —esperando, no trabajando— y
+bloqueando a todo lo demás.
+
+**Corrección a lo que escribimos el 2026-08-01.** En *El tablero mostraba
+datos de hace 4 días* atribuimos el WAL de 8.1 GB únicamente a la falta de `journal_size_limit`. Eso
+era incompleto. Un *checkpoint* de SQLite necesita que ningún otro proceso tenga
+el archivo abierto; un proceso colgado impide el checkpoint por sí solo, sin
+importar cómo esté configurado el límite de tamaño. El WAL gigante y el lote
+perdido no eran dos problemas: eran dos síntomas del mismo proceso colgado.
+`journal_size_limit` era necesario pero no suficiente.
+
+**Por qué no se rellenó.** Se podía generar el lote faltante en cualquier
+momento del 4 de agosto. **No se hizo, deliberadamente.** Una predicción emitida
+con fecha del 3 de agosto pero calculada el 4 se escribe conociendo parte del
+período que dice predecir. Un registro de precisión que admite eso no mide nada.
+El hueco del 3 de agosto es real y se queda, igual que los del 22 al 24 de julio.
+
+**Cambio A → B.**
+
+- **Antes:** `ExecutionTimeLimit` por omisión (72 h) en *Market Signals
+  Refresh*, *Record Predictions* y *Evaluate Predictions*.
+- **Después:** 45 min, 1 h y 2 h respectivamente — siempre por debajo del
+  intervalo de su propio disparador, de modo que una corrida colgada muera antes
+  de que llegue la siguiente.
+- **Antes:** los tres reintentos de `record-predictions` ocurrían la misma
+  noche, con 15 minutos de separación.
+- **Después:** se añadió un segundo disparador a las **05:30**, después de la
+  ventana de mantenimiento de las 04:40. Reintentar en las mismas condiciones
+  congestionadas no iba a funcionar —no funcionó—; reintentar con el WAL recién
+  truncado y sin nadie más escribiendo es un intento genuinamente distinto. El
+  lote llega ~8 horas tarde en vez de nunca.
+- Para que ese segundo disparador no produzca lotes dobles, `record-predictions`
+  aceptó `--min-gap-hours` (20 por omisión) y no registraba nada si el último
+  lote era más reciente que eso. **Este guard se reemplazó al día siguiente;
+  ver la entrada del 2026-08-05.**
+
+**Cómo se modificó el tablero.** "Predicciones en curso" no muestra ningún lote
+emitido el 3 de agosto, y no lo mostrará nunca. El total de predicciones
+evaluables será 15 menor de lo que habría sido.
+
+**Qué transparencia permite.** Que un hueco en el historial sea visible como
+hueco. La alternativa —rellenarlo después— habría dejado el tablero completo y
+el registro sin valor.
+
+---
+
+## 2026-08-01 — HIT exige audiencia real, no solo porcentaje
+
+**Commit:** `07059f7`
+
+**Qué encontramos.** Al revisar 105 predicciones ya evaluadas, la probabilidad
+que el modelo emitía estaba **inversamente correlacionada** con el acierto:
+
+| probabilidad emitida | acierto real |
+|---|---|
+| 31.7% (la más baja) | 96.2% |
+| 76.1% (la más alta) | 28.0% |
+
+**Causa.** 63 de esas 105 predicciones eran de creadores con menos de 5 viewers
+promedio. HIT se definía solo como "creció ≥100%", sin exigir a dónde llegó.
+Para un canal de 2 viewers, doblar significa llegar a 4 — trivial y sin valor
+comercial. El modelo estaba ordenando bien; la vara de medición medía otra cosa.
+
+**Cambio A → B.**
+
+- **Antes:** `HIT = crecimiento ≥ 100%`
+- **Después:** `HIT = crecimiento ≥ 100%` **Y** `pico ≥ 100 viewers`
+- Se añadió el resultado `growth_below_audience` para el caso "creció mucho pero
+  nunca alcanzó audiencia útil", en vez de llamarlo *crecimiento leve* (falso) o
+  *acierto* (exagerado).
+
+**Cambio en el pipeline (mismo día, igual de importante).**
+
+- **Antes:** `record-predictions` tomaba los 15 mejores candidatos sin importar
+  su tamaño.
+- **Después:** descarta candidatos con menos de 50 viewers promedio y evalúa un
+  universo mucho más amplio para llenar el lote.
+
+Justificación medida: predicciones sobre creadores por debajo de 50 viewers
+acertaban **4.1%**; las de 50 o más, **48.4%** (con la vara corregida).
+
+**Cómo se modificó el tablero.**
+
+| indicador | antes | después |
+|---|---|---|
+| Precisión de predicción | 58.5% | 16.2% |
+| Índice de confiabilidad | 46.0 ▲ +41.2% | 9.3 ▼ −16.3% |
+| Calibración: prob. alta | 29.6% | 29.6% |
+| Calibración: prob. baja | 57.7% | 5.1% |
+
+Composición del lote diario, antes y después del filtro:
+
+| lote | base mínima | base promedio |
+|---|---|---|
+| 2026-07-31 (sin filtro) | 1.0 viewers | 2.2 |
+| 2026-08-01 (con filtro) | 76.2 viewers | 1,763 |
+
+**Qué transparencia permite.** Que "acierto" signifique una sola cosa
+verificable: *el creador dobló su audiencia y llegó a un tamaño que una marca
+puede patrocinar*. Antes, el número publicado estaba dominado por canales de 1 a
+5 viewers, y las predicciones en las que el sistema decía tener más confianza
+eran justamente las que peor funcionaban — algo que cualquiera que abriera los
+datos habría encontrado.
+
+**Nota sobre la caída.** El 16.2% refleja historial acumulado bajo el criterio
+viejo (predicciones sobre creadores diminutos). Las predicciones emitidas a
+partir de esta fecha usan el filtro nuevo; el acierto histórico del modelo sobre
+creadores de tamaño relevante es **29.0%**, y hacia ahí debería converger el
+número conforme el historial viejo se diluya.
+
+---
+
+## 2026-08-01 — El tablero mostraba datos de hace 4 días
+
+**Commits:** `e1a402f`, `8cd017a`
+
+**Qué encontramos.** Los indicadores del encabezado no leen el ledger
+directamente: leen un caché materializado. Ese caché tenía fecha del
+**2026-07-28**. La tarea horaria sí corría, pero refresca siete cosas en
+secuencia y el índice de atención es la cuarta; las corridas se cortaban antes de
+llegar.
+
+**Causa raíz.** El archivo WAL de SQLite había crecido a **8.1 GB** (contra una
+base de 12.6 GB). SQLite hace *checkpoint* automáticamente, pero sin
+`journal_size_limit` el archivo nunca devuelve el espacio: se queda en su marca
+máxima. Cada conexión nueva tenía que recorrerlo antes de hacer nada, lo que
+volvía lento todo el sistema (una consulta del analizador llegó a tardar 16
+horas).
+
+**Cambio A → B.**
+
+- **Antes:** sin `journal_size_limit`; el WAL solo podía crecer.
+- **Después:** `journal_size_limit = 256 MB` en todas las conexiones, más un
+  *checkpoint* explícito en la tarea diaria de archivado.
+- Se añadió vigilancia del tamaño del WAL al `health-check` (alerta a 500 MB,
+  crítico a 2 GB), porque nada lo estaba observando — esa es la única razón por
+  la que llegó a 8 GB.
+- Se añadió el índice compuesto `(topic, source, observed_at, phrase)` que le
+  faltaba a la consulta del analizador.
+
+**Cómo se modificó el tablero.** Los indicadores volvieron a reflejar el estado
+real. Contar las filas de un tema pasó de agotar 280 s a **0.1–0.4 s**.
+
+**Qué transparencia permite.** Que los números del encabezado correspondan a los
+datos de hoy y no a los de hace cuatro días. Un indicador congelado es peor que
+uno bajo: parece vivo y no lo está.
+
+---
+
+## 2026-07-27 — Los fallos volvieron a ser visibles
+
+**Commit:** `488a447`
+
+**Qué encontramos.** La sección "Cola de verificación" ordenaba con los aciertos
+primero y mostraba solo 20 filas, con un presupuesto de consulta compartido de
+50. Cuando los aciertos crecieron a 29, **las predicciones fallidas dejaron de
+aparecer en cualquier parte del tablero**, y FAIR/MINOR se mostraban incompletas.
+
+**Cambio A → B.**
+
+- **Antes:** una sola consulta con límite 50, ordenada por acierto primero.
+- **Después:** consulta dedicada (`load_investor_non_hit_evaluated`) con su
+  propio presupuesto, más una sección explícita de *Predicciones fallidas*.
+
+**Cómo se modificó el tablero.** Apareció la sección de fallos (4 predicciones
+MISS que estaban ocultas). FAIR pasó de mostrar 3 de 9 a las 9 completas; MINOR
+de parcial a las 14 completas.
+
+**Qué transparencia permite.** Que el historial muestre los fallos con el mismo
+detalle que los aciertos, por diseño y no por casualidad. Un registro de
+precisión que solo enseña sus éxitos no es un registro de precisión.
+
+---
+
+## 2026-07-27 — Breakouts reales dejaron de descartarse como "sin señal"
+
+**Commit:** (incluido en el trabajo de reclasificación de ese día)
+
+**Qué encontramos.** Una predicción se descartaba como `insufficient_baseline`
+("N/D", excluida del cálculo de precisión) si el creador **partía** de menos de 5
+viewers, sin importar a dónde llegara. Eso descartaba casos como pasar de 2 a 36
+viewers (+1,276%), que son exactamente los despegues que el producto busca
+detectar.
+
+**Cambio A → B.**
+
+- **Antes:** se descartaba si `base < 5`.
+- **Después:** se descarta solo si `base < 5` **Y** `pico < 5` — es decir, si
+  ambos extremos siguen siendo ruido.
+
+**Cómo se modificó el tablero.** 13 predicciones pasaron de "N/D" a HIT o FAIR.
+La precisión publicada subió de **29.4% a 44.7%**.
+
+**Advertencia honesta, en retrospectiva.** Este cambio corrigió un error real,
+pero casi todas las predicciones que rescató eran de creadores diminutos, así
+que empujó la muestra hacia ese sesgo y **contribuyó a la calibración invertida
+que se detectó y corrigió el 2026-08-01**. Se documenta aquí porque el registro
+sirve poco si solo anota los aciertos de quien lo escribe.
+
+---
+
 # Compromisos abiertos
 
 Instrumentación que **todavía no mueve ningún número publicado**, pero que fija
@@ -1277,7 +1277,8 @@ lectura que el protocolo prohíbe.
 | la cadena pública | exporta sólo `prediction_ledger`: **0 de los 12 ids** del brazo aparecen |
 
 El tablero está cegado por **separación de tabla**, no por un filtro que alguien
-tenga que recordar — más robusto que los seis topes de la entrada anterior,
+tenga que recordar — más robusto que los seis topes de *2026-10-06 (4)*
+(que vive en **Cambios que movieron los números**),
 porque no hay nada que olvidar.
 
 El tercero es el de más consecuencia: publicar el grupo de control no filtraría
@@ -1966,113 +1967,6 @@ publicadas — ver la nota del 2026-10-03 sobre la calibración del score.
 
 ---
 
-## 2026-08-26 — Se fija una vara nueva ANTES de aplicarla
-
-**Commit:** pendiente — esta nota se escribe deliberadamente antes de tocar código.
-
-**El problema que se descubrió.** Un porcentaje de acierto no significa nada sin
-la tasa base. Medida sobre 11,730 anclas reales de 7 días en la ventana
-comparable, la tasa base del universo elegible es **52.7%**: más de la mitad de
-los canales con 50+ espectadores cumple la definición actual de éxito por su
-cuenta. La mediana de crecimiento a 7 días en ese universo es **+57.4%**, y el
-umbral de FAIR está en +50%.
-
-Es decir: la vara actual marca como "acierto" algo que le ocurre al canal mediano
-en una semana normal. No mide si un canal despega; mide si tuvo una semana
-normal. Contra ese objetivo la selección rinde **−7.5 pp por debajo del azar**
-(IC95 −14.7 a −0.1).
-
-**Lo que se midió al endurecerla.** Reclasificando el histórico —posible porque
-tanto `prediction_ledger` como `twitch_horizon_labels` guardan el pico y el
-crecimiento reales observados, así que aplicar otro umbral es aritmética sobre
-datos ya escritos, no una predicción rehecha— el lift sube de forma monótona
-conforme la vara se endurece:
-
-| piso del acierto | Draconfly | tasa base | lift | IC95 |
-|---|---|---|---|---|
-| +50% / pico 100 *(actual)* | 45.2% | 52.7% | −7.5 pp | −14.7 a −0.1 |
-| +100% / pico 250 | 25.4% | 24.1% | +1.3 pp | −4.6 a +8.3 |
-| +200% / pico 250 | 16.4% | 12.1% | +4.2 pp | −0.5 a +10.4 |
-| **+250% / pico 250** | **13.6%** | **8.7%** | **+4.8 pp** | **+0.5 a +10.7** |
-| +300% / pico 250 | 11.3% | 7.2% | +4.1 pp | +0.2 a +9.6 |
-
-**La vara que se fija desde hoy**, para medirse hacia adelante:
-
-- **HIT**: crecer **+400%** llegando a **250 espectadores o más**
-- **FAIR**: crecer **+250%** llegando a **250 espectadores o más**
-- Acierto = HIT o FAIR, así que el piso efectivo es **+250% / 250**
-
-**Por qué esta nota existe y se escribe ahora.** La vara se eligió DESPUÉS de
-probar trece combinaciones y quedarse con la de mayor lift. Eso es exactamente
-cómo se fabrica un falso positivo: con trece pruebas, encontrar una que cruce el
-umbral al 95% es casi esperable. El +4.8 pp de arriba está inflado por esa
-selección, y la cifra real hacia adelante será probablemente menor.
-
-Por eso el criterio queda registrado **antes** de medirlo con predicciones
-nuevas. Lo que valga como evidencia no es la tabla de arriba: es lo que den las
-predicciones emitidas a partir de hoy, contra una vara que ya no se puede
-reelegir.
-
-**Qué se afirmará y qué no.** El lift se dará por demostrado solo si, sobre
-predicciones emitidas desde el 2026-08-26 y con esta vara fijada, el intervalo
-de la diferencia queda entero por encima de cero. Hasta entonces se publica
-como hipótesis registrada, no como resultado.
-
-**Lo que la vara NO cambia.** Ni el modelo, ni el filtro de audiencia, ni qué
-creadores se seleccionan. Es un instrumento de medición distinto sobre el mismo
-producto. Ninguna predicción se borra: el histórico se sigue publicando bajo
-ambas varas, etiquetado.
-
-**Qué distingue de verdad la vara nueva.** No el tamaño alcanzado —el 72.3% de
-las selecciones llega a 250 espectadores y al azar lo hace el 69.8%, así que ese
-piso no discrimina nada— sino el múltiplo de crecimiento: 14.1% contra 9.2%.
-El piso de 250 está para que un acierto sea comercialmente útil, no para medir
-al modelo.
-
-### Actualización del 2026-08-27 — la base de comparación estaba incompleta
-
-Las cifras de arriba se calcularon contra 11,730 anclas, porque
-`twitch_horizon_labels` llevaba desde el 19 de agosto sin reconstruirse y solo
-llegaba al día 12. La ventana de mantenimiento de hoy las regeneró: **22,135
-anclas**, y en la ventana comparable pasan de 11,730 a **17,390**, con 25 días
-en vez de 17 y 297 predicciones en vez de 177.
-
-Con la base completa el panorama cambia de forma sustancial:
-
-| piso del acierto | Draconfly | tasa base | lift | IC95 | veredicto |
-|---|---|---|---|---|---|
-| +50% / 100 *(vigente)* | 51.9% | 50.3% | +1.6 pp | −4.1 a +7.3 | no concluyente |
-| +100% / 250 | 29.0% | 23.2% | +5.8 pp | +0.9 a +11.2 | supera |
-| +150% / 250 | 22.9% | 15.4% | **+7.5 pp** | +3.1 a +12.7 | supera |
-| +200% / 250 | 17.5% | 11.3% | +6.2 pp | +2.3 a +11.0 | supera |
-| **+250% / 250** *(pre-registrada)* | **13.8%** | **8.2%** | **+5.7 pp** | **+2.2 a +10.1** | **supera** |
-| +300% / 250 | 11.8% | 6.6% | +5.2 pp | +2.0 a +9.4 | supera |
-
-Dos cosas que hay que decir con precisión:
-
-**La vara vigente ya no está por debajo del azar.** Pasaba de −7.5 pp a +1.6 pp.
-La conclusión de ayer —"la selección rinde peor que el azar"— era un artefacto de
-comparar contra una base incompleta, no un hecho sobre el sistema. Queda
-corregida aquí en vez de borrada, porque el error importa tanto como el dato.
-
-**La vara pre-registrada NO se cambia.** Hoy +150% da más lift (+7.5 pp) que el
-+250% que fijamos ayer, y reajustar por eso sería exactamente lo que la
-pre-registración existe para impedir: elegir el criterio después de ver los
-resultados. La vara sigue siendo **+250% / pico 250**, y sale bien parada por
-sus propios méritos: +5.7 pp, IC95 +2.2 a +10.1, un 69% mejor que el azar.
-
-Lo que cambió es la calidad de la evidencia retrospectiva, no la de la evidencia
-prospectiva. Sigue valiendo lo mismo que ayer: lo que cuente será lo que den las
-predicciones emitidas desde el 2026-08-26 contra una vara que ya no se puede
-reelegir. Siete de ocho varas superando al azar es señal de que el sistema
-discrimina; no es todavía la demostración.
-
-> La vara se aplicó al día siguiente. Lo que movió en pantalla, y el error que
-> apareció al aplicarla, están en **2026-08-27 — Se aplica la vara nueva, y una
-> columna se queda atrás**, en la sección anterior.
-
----
-
 ## 2026-09-16 — Las 225 predicciones de la cohorte no son 225 pruebas independientes
 
 **Commit:** pendiente. **No cambia nada medido ni publicado**: se declara antes
@@ -2261,6 +2155,113 @@ crecimiento mediano de los que revirtieron fue mayor que el de los que
 continuaron. Es reversión a la media y sería comercialmente valioso —diría que
 el breakout más llamativo es la peor apuesta— pero con esta muestra es una
 hipótesis, no un resultado.
+
+---
+
+## 2026-08-26 — Se fija una vara nueva ANTES de aplicarla
+
+**Commit:** pendiente — esta nota se escribe deliberadamente antes de tocar código.
+
+**El problema que se descubrió.** Un porcentaje de acierto no significa nada sin
+la tasa base. Medida sobre 11,730 anclas reales de 7 días en la ventana
+comparable, la tasa base del universo elegible es **52.7%**: más de la mitad de
+los canales con 50+ espectadores cumple la definición actual de éxito por su
+cuenta. La mediana de crecimiento a 7 días en ese universo es **+57.4%**, y el
+umbral de FAIR está en +50%.
+
+Es decir: la vara actual marca como "acierto" algo que le ocurre al canal mediano
+en una semana normal. No mide si un canal despega; mide si tuvo una semana
+normal. Contra ese objetivo la selección rinde **−7.5 pp por debajo del azar**
+(IC95 −14.7 a −0.1).
+
+**Lo que se midió al endurecerla.** Reclasificando el histórico —posible porque
+tanto `prediction_ledger` como `twitch_horizon_labels` guardan el pico y el
+crecimiento reales observados, así que aplicar otro umbral es aritmética sobre
+datos ya escritos, no una predicción rehecha— el lift sube de forma monótona
+conforme la vara se endurece:
+
+| piso del acierto | Draconfly | tasa base | lift | IC95 |
+|---|---|---|---|---|
+| +50% / pico 100 *(actual)* | 45.2% | 52.7% | −7.5 pp | −14.7 a −0.1 |
+| +100% / pico 250 | 25.4% | 24.1% | +1.3 pp | −4.6 a +8.3 |
+| +200% / pico 250 | 16.4% | 12.1% | +4.2 pp | −0.5 a +10.4 |
+| **+250% / pico 250** | **13.6%** | **8.7%** | **+4.8 pp** | **+0.5 a +10.7** |
+| +300% / pico 250 | 11.3% | 7.2% | +4.1 pp | +0.2 a +9.6 |
+
+**La vara que se fija desde hoy**, para medirse hacia adelante:
+
+- **HIT**: crecer **+400%** llegando a **250 espectadores o más**
+- **FAIR**: crecer **+250%** llegando a **250 espectadores o más**
+- Acierto = HIT o FAIR, así que el piso efectivo es **+250% / 250**
+
+**Por qué esta nota existe y se escribe ahora.** La vara se eligió DESPUÉS de
+probar trece combinaciones y quedarse con la de mayor lift. Eso es exactamente
+cómo se fabrica un falso positivo: con trece pruebas, encontrar una que cruce el
+umbral al 95% es casi esperable. El +4.8 pp de arriba está inflado por esa
+selección, y la cifra real hacia adelante será probablemente menor.
+
+Por eso el criterio queda registrado **antes** de medirlo con predicciones
+nuevas. Lo que valga como evidencia no es la tabla de arriba: es lo que den las
+predicciones emitidas a partir de hoy, contra una vara que ya no se puede
+reelegir.
+
+**Qué se afirmará y qué no.** El lift se dará por demostrado solo si, sobre
+predicciones emitidas desde el 2026-08-26 y con esta vara fijada, el intervalo
+de la diferencia queda entero por encima de cero. Hasta entonces se publica
+como hipótesis registrada, no como resultado.
+
+**Lo que la vara NO cambia.** Ni el modelo, ni el filtro de audiencia, ni qué
+creadores se seleccionan. Es un instrumento de medición distinto sobre el mismo
+producto. Ninguna predicción se borra: el histórico se sigue publicando bajo
+ambas varas, etiquetado.
+
+**Qué distingue de verdad la vara nueva.** No el tamaño alcanzado —el 72.3% de
+las selecciones llega a 250 espectadores y al azar lo hace el 69.8%, así que ese
+piso no discrimina nada— sino el múltiplo de crecimiento: 14.1% contra 9.2%.
+El piso de 250 está para que un acierto sea comercialmente útil, no para medir
+al modelo.
+
+### Actualización del 2026-08-27 — la base de comparación estaba incompleta
+
+Las cifras de arriba se calcularon contra 11,730 anclas, porque
+`twitch_horizon_labels` llevaba desde el 19 de agosto sin reconstruirse y solo
+llegaba al día 12. La ventana de mantenimiento de hoy las regeneró: **22,135
+anclas**, y en la ventana comparable pasan de 11,730 a **17,390**, con 25 días
+en vez de 17 y 297 predicciones en vez de 177.
+
+Con la base completa el panorama cambia de forma sustancial:
+
+| piso del acierto | Draconfly | tasa base | lift | IC95 | veredicto |
+|---|---|---|---|---|---|
+| +50% / 100 *(vigente)* | 51.9% | 50.3% | +1.6 pp | −4.1 a +7.3 | no concluyente |
+| +100% / 250 | 29.0% | 23.2% | +5.8 pp | +0.9 a +11.2 | supera |
+| +150% / 250 | 22.9% | 15.4% | **+7.5 pp** | +3.1 a +12.7 | supera |
+| +200% / 250 | 17.5% | 11.3% | +6.2 pp | +2.3 a +11.0 | supera |
+| **+250% / 250** *(pre-registrada)* | **13.8%** | **8.2%** | **+5.7 pp** | **+2.2 a +10.1** | **supera** |
+| +300% / 250 | 11.8% | 6.6% | +5.2 pp | +2.0 a +9.4 | supera |
+
+Dos cosas que hay que decir con precisión:
+
+**La vara vigente ya no está por debajo del azar.** Pasaba de −7.5 pp a +1.6 pp.
+La conclusión de ayer —"la selección rinde peor que el azar"— era un artefacto de
+comparar contra una base incompleta, no un hecho sobre el sistema. Queda
+corregida aquí en vez de borrada, porque el error importa tanto como el dato.
+
+**La vara pre-registrada NO se cambia.** Hoy +150% da más lift (+7.5 pp) que el
++250% que fijamos ayer, y reajustar por eso sería exactamente lo que la
+pre-registración existe para impedir: elegir el criterio después de ver los
+resultados. La vara sigue siendo **+250% / pico 250**, y sale bien parada por
+sus propios méritos: +5.7 pp, IC95 +2.2 a +10.1, un 69% mejor que el azar.
+
+Lo que cambió es la calidad de la evidencia retrospectiva, no la de la evidencia
+prospectiva. Sigue valiendo lo mismo que ayer: lo que cuente será lo que den las
+predicciones emitidas desde el 2026-08-26 contra una vara que ya no se puede
+reelegir. Siete de ocho varas superando al azar es señal de que el sistema
+discrimina; no es todavía la demostración.
+
+> La vara se aplicó al día siguiente. Lo que movió en pantalla, y el error que
+> apareció al aplicarla, están en **2026-08-27 — Se aplica la vara nueva, y una
+> columna se queda atrás**, en la sección anterior.
 
 ---
 
