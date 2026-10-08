@@ -2413,6 +2413,79 @@ sí movieron números, lo que dejaba sin sentido las dos secciones.
 
 ---
 
+
+---
+
+## 2026-10-07 (2) — Los 23 GB borrados, y el arreglo que reintrodujo el problema que venía a resolver
+
+### El borrado
+
+| | |
+| --- | --- |
+| base principal | **34.82 GB → 6.44 GB** |
+| recuperado | **28.4 GB** |
+| duración | **22 min** (13:21 → 13:43) |
+| `quick_check` | ok, `freelist` 0 |
+
+Más de los ~23 GB estimados. Las nueve tablas que importan quedaron intactas:
+`prediction_ledger` 1,215, `blind_prediction_ledger` 27,
+`youtube_prediction_ledger` 15, snapshots de Twitch 4,364,443 y de YouTube
+2,562,639.
+
+**El `drop` no era instantáneo, como se había dicho.** Borrar 54.7 millones de
+filas con cinco índices obliga a liberar ~6 millones de páginas, y en modo WAL
+cada liberación se escribe: el `-wal` creció a 1.75 → 3.53 → 5.94 GB antes de
+que el VACUUM lo colapsara. Ése era el trabajo pesado, no el VACUUM.
+
+### El defecto que se introdujo al arreglarlo
+
+`conteo_senales_vivas()` copió la huella barata de la versión congelada, donde
+**cualquier** cambio de `min`/`max` de rowid dispara un `count(*)` completo.
+Allí es correcto: esa tabla no cambia nunca y el recuento no se paga jamás.
+
+La base viva crece cada hora, así que la huella **nunca** coincide. La primera
+versión recontaba 181 millones de filas en cada corrida de la ventana —
+exactamente el escaneo que la huella existe para evitar. **Un arreglo que
+reintroduce el problema que vino a resolver no es un arreglo.**
+
+Se descubrió al correr `data_health_snapshot()` para comprobar otra cosa —que
+ya no se rompe sin la copia muerta— y verlo quedarse colgado contando.
+
+### La regla que lo arregla ya estaba escrita
+
+En el docstring de la versión congelada: *"un insert mueve el máximo y
+`archive_old_signal_observations()`, que es lo único que borra y borra siempre
+lo más viejo, mueve el mínimo"*.
+
+```
+mínimo igual   -> solo hubo inserciones; el delta del máximo es exacto
+mínimo movido  -> corrió el archivado, hay huecos interiores: recontar
+```
+
+El archivado conserva **a propósito** la fila más reciente de cada serie aunque
+sea vieja, así que sus borrados dejan huecos interiores y `max - min + 1`
+sobrecontaría. Por eso ese caso —semanal como mucho— paga el escaneo.
+
+Más una red de seguridad: si el ajuste excediera `max - min + 1`, alguna
+suposición dejó de ser cierta y vale más pagar el escaneo que publicar un número
+inventado.
+
+Medido después: **22 s la primera corrida y 21 s la siguiente**, y de eso casi
+todo es importar Python y contar los snapshots de la base principal.
+
+### Dos pruebas que no probaban nada
+
+**La primera no podía correr:** medía los `count(*)` reasignando
+`conn.execute`, y ese atributo es de solo lectura en `sqlite3`. Seis de siete
+casos morían con `AttributeError`. Rehecha con una subclase de `Connection` vía
+`factory`.
+
+**La segunda pasaba sin cubrir nada:** ponía un hueco interior dejando `min` y
+`max` intactos, así que la función salía por el camino del caché y no llegaba a
+la red de seguridad. Se detectó quitando la red y viendo que la prueba seguía en
+verde. Ahora usa un conteo previo inflado —200 filas sobre un rango de 105
+rowids, imposible— que sí fuerza el camino.
+
 ## 2026-10-07 — El crítico de WAL sonaba por una tarea programada que termina sola
 
 **Y el consejo que imprimía apuntaba a la base equivocada.**
