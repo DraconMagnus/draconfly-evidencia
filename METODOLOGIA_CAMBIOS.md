@@ -2416,6 +2416,58 @@ sí movieron números, lo que dejaba sin sentido las dos secciones.
 
 ---
 
+
+---
+
+## 2026-10-08 — Un EOF de TLS tumbó la ventana de YouTube; Twitch ya estaba vacunado
+
+La corrida del YouTube Collector de las **06:45** murió con `SSL:
+UNEXPECTED_EOF_WHILE_READING` —un EOF de TLS a mitad del handshake con el API
+de Google— y perdió la ventana de 4 h completa. Las **9 corridas anteriores**
+(cada 4 h) habían ido bien: era un hipo de red, no una caída.
+
+### Lo que faltaba
+
+`youtube_get()` abría `urlopen(timeout=30)` **sin reintento**. Cualquier corte
+transitorio —en el descubrimiento, los detalles o los canales— lanzaba y
+mataba la corrida entera, llevándose su código de salida.
+
+**Twitch ya no tenía este agujero.** `twitch_source._urlopen_with_retry` existe
+desde el 2026-07-25, añadido cuando *"un error transitorio lo mató una vez y la
+tarea simplemente falló en vez de reintentar"* — el mismo texto, la misma clase
+de fallo. YouTube nunca recibió el mismo trato, y lo cobró hoy.
+
+### El arreglo
+
+Se copió el helper de Twitch a `youtube_history.py`: 3 intentos, espera
+creciente, y **sigue lanzando** tras agotarlos para no enmascarar una caída
+real. `SSLEOFError` hereda de `OSError`, así que la misma tupla
+`(URLError, TimeoutError, OSError)` que usa Twitch atrapa exactamente el error
+de hoy.
+
+Copia local en vez de helper compartido **a propósito**: extraerlo obligaría a
+tocar `twitch_source.py`, que es el camino de la fuente principal, y no hay
+tercer colector que lo justifique todavía. El comentario de cada copia apunta a
+la otra.
+
+### Por qué no toca la cohorte de YouTube
+
+Es recolección, no selección. El colector llena `youtube_video_snapshots`; qué
+15 videos se emiten lo decide el ranker congelado, intacto. La ventana perdida
+de las 06:45 deja un hueco de snapshots que las corridas de 02:45 y 10:45
+flanquean — y de ahora en adelante un hipo de red no abre ese hueco.
+
+### Nota sobre el aviso
+
+El reporte matutino seguirá mostrando el `código 1` hasta que la corrida de las
+**10:45** cierre con éxito y lo limpie. Eso es correcto: el health check
+reporta lo que encontró la última corrida, no inventa que ya se resolvió. No
+hace falta tocar nada ahí.
+
+Ninguna prueba cubría el reintento de Twitch. Las 5 nuevas cubren el de YouTube
+—recuperación, persistencia, el `SSLEOFError` exacto y que `youtube_get` pase
+por el reintento— y de paso documentan el patrón para los dos.
+
 ## 2026-10-07 (2) — Los 23 GB borrados, y el arreglo que reintrodujo el problema que venía a resolver
 
 ### El borrado
