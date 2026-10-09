@@ -39,6 +39,47 @@ que hayan alterado lo que el tablero mostraba.
 
 ---
 
+## 2026-10-08 (4) — Auto-refresco honesto y tarjetas que llevan al creador
+
+Dos cosas sobre el Creator Pulse del hero: que se muevan solas sin mentir, y que
+al pulsarlas abran el perfil real del creador.
+
+### Se mueven solas, pero sólo cuando el dato se movió
+
+El hero vuelve a ser un fragmento que corre solo cada 30 s —como el wobble— pero
+con la diferencia que lo es todo: **relee el dato real en cada pasada** en vez de
+sumarle una onda seno a un número quieto. Ningún valor es función de `now()`.
+
+- La frescura (`datos de hace N min`) avanza con el reloj: es tiempo real.
+- Las tarjetas y la cinta se releen; cuando el colector trae una lectura nueva
+  —Twitch cada 1 h, YouTube cada 4 h— y la instantánea se reconstruye (cada 10
+  min), los números cambian **solos porque de verdad cambiaron**.
+- Lo que NO se relee cada 30 s: `metrics` / Índice de Confiabilidad. Salen de
+  `ledger_summary`, que es caro, y sólo se mueven cuando cierra una predicción
+  —lo que la cinta ya muestra en vivo—. Se dejan en su valor del cargado de
+  página; una recarga los pone al día. Reconsultarlos cada 30 s sería pagar
+  mucho por un número que casi nunca se mueve.
+
+El trueque, dicho claro: el movimiento es honesto pero más lento que el wobble.
+Entre lecturas reales las tarjetas se quedan quietas, y está bien — eso es lo que
+están haciendo los creadores.
+
+### Clicables al perfil real
+
+Cada tarjeta es ahora un enlace. Twitch va a `twitch.tv/<login>` —el login *es*
+el handle del canal—; YouTube a `youtube.com/channel/<channel_id>`. La URL sale
+de nuestro propio dato recolectado, no de contenido de página, así que es de
+confianza; abre en pestaña nueva con `rel=noopener` para que la pestaña nueva no
+pueda tocar la del tablero. Sin URL (dato viejo) la tarjeta queda muerta en vez
+de con un enlace roto.
+
+Verificado en el DOM real: las 6 tarjetas con su href correcto, `target=_blank`,
+`rel=noopener noreferrer`; Streamlit no recorta los anchors. Las pruebas
+ejecutan las funciones sueltas (el módulo no se importa) y fijan que el HIT y el
+MISS salgan con su color, que el enlace lleve al perfil, y que sin URL no haya
+`<a>` roto.
+
+
 ## 2026-10-08 (3) — Una cinta de cierres reales reemplaza al wobble
 
 Lo que el wobble fingía —que la pantalla esté viva— ahora lo da algo que de
