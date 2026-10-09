@@ -39,6 +39,48 @@ que hayan alterado lo que el tablero mostraba.
 
 ---
 
+## 2026-10-08 (2) — El Índice de Confiabilidad del tablero se animaba con una onda seno
+
+**Cambia lo que el tablero muestra como Índice de Confiabilidad: de un número
+animado a su valor real.** No tocaba el ledger —la cifra guardada siempre fue
+honesta— pero sí la que veía en pantalla la primera persona que abría la demo.
+
+### Qué hacía
+
+En modo Investor Demo, un fragmento se redibujaba solo cada 3 s y sumaba una
+onda seno a las cifras del titular, bajo una etiqueta "LIVE" y el texto
+"actualizando en vivo":
+
+    live_index = attention_index + 0.3  * math.sin(now / 2.4)
+    live_delta = attention_delta + 0.15 * math.sin(now / 2.4 + 1.1)
+
+Sobre un índice de ~18.5, ese ±0.3 lo hacía oscilar visiblemente entre ~18.2 y
+~18.8 **sin un solo dato nuevo**. Las tarjetas de Creator Pulse hacían lo mismo
+con ±1.2% en su último punto.
+
+### Por qué se retiró
+
+Lo encontró una revisión externa de preparación para VC. El número animado es el
+que mide la confiabilidad, en la primera pantalla que ve un fondo, bajo una
+etiqueta que afirma "en vivo". Contradice de raíz lo que el repositorio público
+existe para sostener —que los números se verifican, no se creen—. Un evaluador
+que abre el código y encuentra `índice + 0.3·sin(now)` bajo "LIVE" razonablemente
+deja de confiar en **todos** los números, incluido el 26.7% que es real. Cuesta
+credibilidad sin comprar nada: ni siquiera es un dato.
+
+### Qué quedó
+
+El hero muestra el valor real, quieto entre refrescos, igual que el resto del
+tablero ("instantánea hace N min"). Se retiró el wobble, el fragmento
+`run_every=3s` y el caption "actualizando en vivo". El movimiento "tipo
+Bloomberg" honesto —que algo se mueva sólo cuando de verdad llega un dato, con su
+hora— queda pendiente como rediseño, no como animación.
+
+El `<span>LIVE</span>` del encabezado global (Draconfly · Attention Radar) se
+deja por ahora: es el estado del *sistema*, que sí está vivo recolectando cada
+hora, no una afirmación sobre un número. Se revisará con el rediseño.
+
+
 ## 2026-10-06 (4) — Arreglar una de seis y darlo por cerrado
 
 Ampliación de *2026-10-06 (3)*, escrita porque el error de método importa
