@@ -39,6 +39,44 @@ que hayan alterado lo que el tablero mostraba.
 
 ---
 
+## 2026-10-08 (3) — Una cinta de cierres reales reemplaza al wobble
+
+Lo que el wobble fingía —que la pantalla esté viva— ahora lo da algo que de
+verdad lo está. La regla que lo separa del wobble: **el movimiento viene de un
+evento real o del tiempo que pasa, nunca de aplicarle una función de `now` a un
+número quieto.**
+
+### Qué muestra
+
+Una cinta que desfila los **últimos cierres reales** del ledger, cada uno con su
+crecimiento y su veredicto. Lo único que se mueve solo es el scroll (puro CSS);
+cada chip es un hecho. Van **aciertos y fallos sin filtrar** —`zefgamingplay
+−97% FALLÓ` junto a `yuyuta0702 +3345% HIT`— por el mismo principio que el salón
+de fallidas: una cinta de puros ganadores sería justo lo que el producto evita.
+
+A la derecha, la frescura real: un punto verde y `datos de hace N min`, donde la
+N avanza con el reloj —movimiento honesto— y vuelve ámbar si la instantánea pasa
+de 60 min.
+
+### El cegado va en el loader, no en quien lo llama
+
+`load_recent_closings` filtra `created_at < COHORTE_B_DESDE`. Hoy B no tiene un
+solo cierre, pero desde ~2026-10-13 empezarán a vencer, y una cinta ordenada por
+fecha de cierre los pondría **al frente del hero** — habría sido la sexta
+aparición de la misma fuga, y la más visible. Ponerlo en el loader y no en la
+vista significa que no se puede olvidar al agregar otra pantalla.
+
+Una prueba fija las dos cosas por AST —el filtro de B y que ningún valor de la
+cinta sea función de `now()`— y un render funcional comprueba que el HIT y el
+MISS aparecen los dos con su color. `dashboard.py` no se importa en pruebas
+(corre su script al importar), así que se ejecuta la función suelta, como ya
+hacían las pruebas del tablero.
+
+El movimiento con *flash al tick* —destellar un número cuando un refresco real
+lo cambia— queda para una segunda vuelta; esta primera es sólo la cinta y el
+reloj, que es casi todo el efecto por poco costo y cero riesgo.
+
+
 ## 2026-10-08 (2) — El Índice de Confiabilidad del tablero se animaba con una onda seno
 
 **Cambia lo que el tablero muestra como Índice de Confiabilidad: de un número
