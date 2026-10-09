@@ -39,6 +39,34 @@ que hayan alterado lo que el tablero mostraba.
 
 ---
 
+## 2026-10-08 (5) — El salón de predicciones también lleva al creador
+
+Mismo gesto que las tarjetas de Creator Pulse, ahora en las tablas de
+predicciones: el **activo de atención** es clicable y abre el canal del creador,
+en **cualquier estado** —HIT, FAIR, crecimiento leve, fallida, sin alcance, sin
+señal y pendientes—.
+
+### Por qué salió barato y consistente
+
+Un solo renderer (`render_prediction_hall_table`) dibuja las siete tablas, así
+que se tocó una función y quedaron todas. Y el enlace no hubo que inventarlo: los
+**1,230 registros ya tenían `profile_url`** —se fija al EMITIR la predicción
+(`https://www.twitch.tv/<login>`)— y los tres loaders ya lo traían. El activo
+lleva al mismo perfil que se prometió el día que se emitió, no a uno reconstruido
+después.
+
+### La guardia que importa
+
+Sólo se enlaza si `profile_url` empieza por `https://`. Un valor vacío o raro
+—incluido un `javascript:`— cae a texto plano, nunca a un href roto o peligroso.
+Una prueba lo fija con `javascript:alert(1)` entre los casos, y se verificó que
+sin la guardia esa prueba falla.
+
+Abre en pestaña nueva con `rel=noopener`. Verificado en el DOM real: **72
+enlaces** repartidos por las tablas, cada uno con su href correcto, `target=_blank`
+y `rel=noopener noreferrer`.
+
+
 ## 2026-10-08 (4) — Auto-refresco honesto y tarjetas que llevan al creador
 
 Dos cosas sobre el Creator Pulse del hero: que se muevan solas sin mentir, y que
@@ -2539,6 +2567,45 @@ sí movieron números, lo que dejaba sin sentido las dos secciones.
 
 
 ---
+
+## 2026-10-08 — Una prueba llenó el disco C: con 98 GB de basura
+
+La suite empezó a fallar con `No space left on device`. C: había pasado de 96 GB
+libres a **0.1 GB**, y el culpable era una prueba mía.
+
+### Qué pasó
+
+`test_wal_drenando` (del 2026-10-07) simulaba un WAL crítico creando un archivo
+`-wal` del tamaño del límite —2.2 GB— con `seek` más un byte, creyendo que
+quedaba disperso (sparse). **En NTFS no lo queda:** un `seek`+`write` asigna los
+bytes reales. Cada uno de los cuatro casos escribía 2.2 GB, y como usaba
+`tempfile.mkdtemp()` sin limpiar, cada corrida dejaba los directorios atrás. **65
+corridas** —las de desarrollar el tablero estos dos días— acumularon **98 GB** de
+`x.sqlite3-wal` huérfanos en `%TEMP%`.
+
+Esto además explica el misterio del 2026-10-07: "C: bajó 50 GB en quince horas".
+No era un proceso del sistema; era yo, corriendo la suite.
+
+### El arreglo
+
+La prueba **simula el tamaño con un stat falso** en vez de escribir el archivo:
+0.028 s, cero bytes de relleno, y borra su directorio temporal al terminar. Una
+prueba que para verificar un tamaño tiene que *ocupar* ese tamaño está haciendo
+el ridículo.
+
+Y por instrucción del dueño —"para eso tenemos el SSD"—, el temporal del VACUUM
+de `borrar-copia-muerta` se dirige ahora al **SSD** (la carpeta de la propia
+base, en S:) y no al `%TEMP%` de C:. Un VACUUM de la base principal crea una
+copia entera como temporal —decenas de GB—; por defecto SQLite la pondría en C:
+y la volvería a llenar. La base ya vive en S:, que es su lugar.
+
+### Lo que no se tocó
+
+El temp del resto del pipeline sigue en su sitio: las tareas programadas no
+escriben temporales grandes, y reconfigurar su entorno exigiría reinstalarlas
+—más riesgo que beneficio—. El problema concreto era el VACUUM manual y una
+prueba rota; los dos quedaron atendidos.
+
 
 ## 2026-10-08 — Un EOF de TLS tumbó la ventana de YouTube; Twitch ya estaba vacunado
 
