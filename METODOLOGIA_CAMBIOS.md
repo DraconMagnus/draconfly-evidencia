@@ -2568,6 +2568,72 @@ sí movieron números, lo que dejaba sin sentido las dos secciones.
 
 ---
 
+## 2026-10-11 — La consulta de tareas avisaba por un timeout transitorio
+
+El health check consulta el estado de las 17 tareas con 17 llamadas a
+`Get-ScheduledTaskInfo` (API COM del scheduler, lenta bajo carga). Cuando la
+maquina estaba ocupada --por ejemplo mientras Generate Labels churnea ~37 min--
+esa consulta pasaba de los 60 s y el health check avisaba "No se pudo consultar
+Task Scheduler". Apareció **244 veces** en el log sin que nada estuviera roto:
+justo la alarma que, por repetirse sin motivo, ensena a ignorar las alarmas (el
+mismo defecto de 267011 y del WAL que drena).
+
+**Ahora se reintenta una vez y solo se avisa si falla dos veces seguidas.** Un
+pico momentaneo pasa callado; un scheduler que de verdad no responde se nota. El
+timeout por intento subio a 120 s, y como el check corre cada 20 min, 2x120 s en
+el peor caso no aprieta ningun presupuesto. El parseo del JSON se separo del
+timeout para no confundir "no respondio" con "respondio algo raro".
+
+De paso se arreglo el mensaje del aviso del tablero: terminaba en
+`run_dashboard_autostart.cmd.` y el usuario copio el punto final --y PowerShell
+ademas exige `.\`--, asi que no corria. Ahora trae el comando listo para pegar:
+`.un_dashboard_autostart.cmd`.
+
+
+## 2026-10-09 — El VACUUM dejó la base sin estadísticas, y Generate Labels se colgó
+
+La tarea `Generate Labels` arrancó a las 07:15 y a media mañana el health check la
+marcó CRITICAL: 90 min 'Running', probablemente colgada. Los 4 días anteriores
+completaba sin problema.
+
+### La causa, encontrada midiendo
+
+No era un cuelgue aleatorio. **`sqlite_stat1` no existía** en la base principal:
+cero estadísticas para el planificador de consultas. Sin ellas, SQLite planifica
+los joins a ciegas, y las consultas pesadas de generate-labels —sobre millones de
+snapshots— se desplomaban.
+
+El porqué encaja al minuto: el **VACUUM del 2026-10-08** (al borrar la copia
+muerta de signal_observations) reescribió la base entera y la dejó sin
+`sqlite_stat1`. El `generate-labels` del 10-08 por la mañana corrió ANTES del
+VACUUM —rápido—; el del 10-09 corrió DESPUÉS —a ciegas, colgado—.
+
+### El arreglo, y la prueba
+
+`ANALYZE` reconstruye las estadísticas: 49.7 s, y `sqlite_stat1` pasó de no
+existir a 64 filas. Con eso, la re-corrida de generate-labels **completó** en ~37
+min (Twitch 8,047,515 · YouTube 4,220,825) — que es su duración real, de ahí su
+`ExecutionTimeLimit` de 4 h. Antes del ANALYZE no terminaba.
+
+**La prevención:** `borrar-copia-muerta --vacuum` ahora corre `ANALYZE` justo
+después del VACUUM, siempre. Un VACUUM sin ANALYZE es media operación: devuelve el
+espacio pero deja la base lenta. Una prueba verifica que tras el VACUUM exista
+`sqlite_stat1`, y que el código corra ANALYZE después del VACUUM.
+
+### Lo que no se corrompió
+
+Nada. Las etiquetas quedaron intactas (las corridas colgadas no llegaron a
+escribir; rollback atómico), y Twitch/YouTube estaban al día salvo el refresco de
+ese día, que la re-corrida recuperó. El estado atascado de la tarea se limpió con
+un `Stop-ScheduledTask` (admin), y desde el 10-10 corre normal.
+
+### Dónde quedó pendiente lo demás
+
+El timeout de 60 s de la consulta de tareas (ruido cuando la máquina está bajo
+carga) y los procesos python huérfanos de tareas que se cuelgan quedaron
+anotados, sin atender todavía.
+
+
 ## 2026-10-08 — Una prueba llenó el disco C: con 98 GB de basura
 
 La suite empezó a fallar con `No space left on device`. C: había pasado de 96 GB
