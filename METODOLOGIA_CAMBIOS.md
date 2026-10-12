@@ -2568,6 +2568,44 @@ sí movieron números, lo que dejaba sin sentido las dos secciones.
 
 ---
 
+## 2026-10-12 — Market Signals Refresh se colgaba cuando una fuente externa fallaba
+
+El health check marco `Market Signals Refresh` con codigo **267014** --matada por
+su ExecutionTimeLimit (45 min)--. La corrida de las 06:55 arranco y nunca
+registro su cierre; la de las 00:55 completo bien.
+
+### No es nuevo, y no es la BD
+
+A diferencia de Generate Labels (que fue el `sqlite_stat1` vacio del VACUUM), esto
+viene de **julio** y es intermitente: de las ultimas 10 corridas reales solo
+colgo 1. Asi que no son las estadisticas: es la red.
+
+### La causa
+
+La tarea hace un barrido de cuatro fuentes externas --reddit, twitch, wikipedia,
+hacker-news-- en serie. Cada llamada HTTP tiene su timeout de 25 s, pero cuando
+UNA fuente se degrada, el collector hace *muchas* llamadas lentas (wikipedia
+itera titulos, twitch 300 streams) y la suma de timeouts pasa de los 45 min. Un
+`try/except` por collector atrapa una EXCEPCION, pero no un cuelgue que solo es
+lento: ese bloquea sin lanzar, y la tarea muere al limite perdiendo TODO lo ya
+recolectado de las otras fuentes.
+
+### El arreglo: presupuesto por fuente
+
+Cada collector corre con un tope de **9 min** (4x9 = 36 < 45). Si una fuente lo
+pasa, se la omite nombrandola --`"timeout 540s (fuente lenta, omitida)"`-- y se
+guarda lo que las demas si trajeron, con exito. Un kill a los 45 min que pierde
+todo se convierte en una corrida que termina limpia con lo recolectado.
+
+Se usa un hilo **daemon**, no `concurrent.futures`: el executor registra un
+atexit que ESPERA a sus hilos, asi que una fuente colgada impediria que el
+proceso saliera --el mismo cuelgue por otra puerta--. Un daemon muere con el
+proceso.
+
+4 pruebas: lo rapido devuelve, lo colgado corta sin esperar, el hilo abandonado
+es daemon, y un error real (no timeout) se propaga para registrarse como error.
+
+
 ## 2026-10-11 — La consulta de tareas avisaba por un timeout transitorio
 
 El health check consulta el estado de las 17 tareas con 17 llamadas a
@@ -2587,7 +2625,8 @@ timeout para no confundir "no respondio" con "respondio algo raro".
 De paso se arreglo el mensaje del aviso del tablero: terminaba en
 `run_dashboard_autostart.cmd.` y el usuario copio el punto final --y PowerShell
 ademas exige `.\`--, asi que no corria. Ahora trae el comando listo para pegar:
-`.un_dashboard_autostart.cmd`.
+`.
+un_dashboard_autostart.cmd`.
 
 
 ## 2026-10-09 — El VACUUM dejó la base sin estadísticas, y Generate Labels se colgó
