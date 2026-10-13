@@ -3,7 +3,7 @@
   "predictions": 1290,
   "outcomes": 1185,
   "last_hash": "ebc47ba26591e9a33f09ad3af4dbc5820d03b8c8cf3d466ae8b8acafba92feea",
-  "updated_at": "2026-10-12T13:01:05.657126+00:00",
+  "updated_at": "2026-10-13T03:10:03.773345+00:00",
   "algoritmo": "sha256 sobre {seq,event,recorded_at,data,prev} en JSON canonico (sort_keys, sin espacios, UTF-8)",
   "verificar": "python -m draconfly verify-public-ledger"
 }
