@@ -2568,6 +2568,48 @@ sí movieron números, lo que dejaba sin sentido las dos secciones.
 
 ---
 
+## 2026-10-14 — Generate Labels se colgó otra vez: las estadísticas se quedan viejas
+
+Segunda vez en cinco días que `Generate Labels` arranca a las 07:15 y no cierra
+--queda zombi, "Running", y el health check la marca CRITICAL--. El 10-09 fue el
+`sqlite_stat1` vacío tras el VACUUM; esta vez la tabla existe pero sus datos
+estaban **viejos**.
+
+### La medición
+
+`sqlite_stat1` decía que `twitch_stream_snapshots` tenía **4,496,960** filas. El
+`max(rowid)` real era **5,901,794** — un **31% de desfase**. Con estadísticas así
+de desactualizadas el planificador elige mal los joins y las consultas pesadas de
+generate-labels se degradan hasta pasar su ventana.
+
+El ANALYZE del 10-09 fue de **una sola vez**. Nada lo repetía, y los snapshots
+crecen ~300k filas/día, así que en cinco días las stats volvieron a quedarse
+atrás. Arreglar la causa de raíz (el VACUUM) no bastaba: el problema de fondo era
+que las estadísticas nunca se refrescaban.
+
+### El arreglo sistémico
+
+`maintenance_checkpoint()` --que corre a diario a las 04:40 en la ventana, con la
+base ya tranquila, justo antes del generate-labels de las 07:15-- ahora corre
+`ANALYZE` después del checkpoint. ~70 s, y las stats nunca se quedan más de un día
+atrás. Una prueba verifica que tras el checkpoint exista `sqlite_stat1` y que el
+código corra ANALYZE después del wal_checkpoint.
+
+### Recuperación
+
+ANALYZE manual (68 s) → las etiquetas de hoy se regeneraron. El estado atascado se
+limpió con `Stop-ScheduledTask` (admin). Las etiquetas no se corrompieron (las
+corridas colgadas no llegan a escribir; rollback atómico).
+
+### Pendiente, para otro día
+
+El `ExecutionTimeLimit` real de Generate Labels es de 4 h, así que un cuelgue
+genuino se queda zombi hasta 4 h o hasta que alguien lo pare a mano. Con el
+ANALYZE diario los cuelgues deberían cesar, pero bajar ese límite a ~90 min
+--para que un cuelgue se mate solo y no bloquee la corrida del día siguiente--
+sigue siendo una mejora, y requiere reinstalar la tarea (admin).
+
+
 ## 2026-10-12 — Market Signals Refresh se colgaba cuando una fuente externa fallaba
 
 El health check marco `Market Signals Refresh` con codigo **267014** --matada por
